@@ -1,1 +1,0 @@
-@qbasic asc-man.bas

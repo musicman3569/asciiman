@@ -4,8 +4,7 @@ DECLARE SUB Pause ()
 DECLARE SUB IntroVid ()
 DECLARE SUB DeadVid ()
 levels = 9
-start.place = 1
-CHDIR ".\programs\ASCIIMAN"
+start.place = 2
 DIM l$(130)
 DIM enemy.col$(10)
 DIM enemy.row$(10)
@@ -46,7 +45,7 @@ IntroVid
 FOR level = start.place TO levels
     '‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹
     level$ = LTRIM$(STR$(level))
-    file$ = "LEV_" + level$ + ".DAT"
+    file$ = ".\DATA\LEV_" + level$ + ".DAT"
     enemy.count = 0
     fire.count = 0
     enemy.animate.timer = 0
@@ -258,7 +257,7 @@ FOR level = start.place TO levels
             IF enemy.move(o) = move.num(o) THEN
                 enemy.move(o) = 0
                 move.num(o) = INT(RND * 20) + 1
-      
+
                 IF enemy.row(o) <> 0 AND enemy.col(o) <> 0 THEN
                     new.enemy.col = enemy.col(o) + INT(RND * 3) - 1
                     new.enemy.char$ = CHR$(SCREEN(enemy.row(o), new.enemy.col))
@@ -279,15 +278,24 @@ FOR level = start.place TO levels
 
         '--- Handle all other player collisions
         IF new.row <> my.row OR new.col <> my.col THEN
+            new.position.changed = 1
+            LOCATE my.row, my.col: PRINT " "
+        ELSE
+            new.position.changed = 0
+        END IF
+
+        '--- Keep checking the new position for collisions until the collisions stop moving it
+        WHILE new.position.changed
+            new.position.changed = 0
             SELECT CASE CHR$(SCREEN(new.row, new.col))
                 CASE " "
                 CASE "_"
                 CASE "≥"
                     GOSUB die
                 CASE "/"
-                    new.col = new.col - 1: my.jump.timer = 0
+                    new.col = new.col - 1: my.jump.timer = 0: new.position.changed = 1
                 CASE "\"
-                    new.col = new.col + 1: my.jump.timer = 0
+                    new.col = new.col + 1: my.jump.timer = 0: new.position.changed = 1
                 CASE "∞"
                     lev.stat$ = "DONE"
                 CASE ""
@@ -297,12 +305,11 @@ FOR level = start.place TO levels
                     lives = lives + 1
                     el.stat = 0
                 CASE ELSE
+                    ' Any other characters will be considered solid
                     new.row = my.row: new.col = my.col
             END SELECT
-   
-            LOCATE my.row, my.col: PRINT " "
-            my.row = new.row: my.col = new.col
-        END IF
+        WEND
+        my.row = new.row: my.col = new.col
 
         '--- Render player
         LOCATE my.row, my.col
