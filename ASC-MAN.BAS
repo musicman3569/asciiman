@@ -214,6 +214,8 @@ FOR level = start.place TO levels
 
         '--- Handle player keyboard input
         SELECT CASE UCASE$(INKEY$)
+            CASE IS = CHR$(27) 'Escape
+                GOSUB Finished
             CASE IS = CHR$(0) + "M" 'right
                 IF spikeball.cooldown.timer = 0 AND my.char.below$ <> "/" AND my.char.below$ <> "\" THEN new.col = my.col + 1
             CASE IS = CHR$(0) + "K" 'left
