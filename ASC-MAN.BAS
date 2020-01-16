@@ -4,7 +4,7 @@ DECLARE SUB Pause ()
 DECLARE SUB IntroVid ()
 DECLARE SUB DeadVid ()
 levels = 9
-start.place = 2
+start.place = 1
 DIM l$(130)
 DIM enemy.col$(10)
 DIM enemy.row$(10)
@@ -364,6 +364,7 @@ END SUB
 
 SUB IntroVid
     CLS: SCREEN 12
+    _FULLSCREEN _SQUAREPIXELS
     m$ = "ASCII-MAN  "
     WHILE INKEY$ <> "": WEND
     FOR col = 1 TO LEN(m$)
