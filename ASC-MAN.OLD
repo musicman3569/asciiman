@@ -1,0 +1,420 @@
+DEFINT A-Z
+DECLARE SUB Pause ()
+DECLARE SUB IntroVid ()
+DECLARE SUB DeadVid ()
+levels = 9
+start.place = 1
+CHDIR "D:\ASCIIMAN"
+DIM l$(130)
+DIM o.c$(10)
+DIM o.r$(10)
+DIM f.c$(10)
+DIM f.r$(10)
+DIM o.move(30)
+DIM move.num(30)
+
+'Colors----
+hero.color = 14
+o.color = 2
+ground.color = 8
+ground2.color = 8
+ground3.color = 9
+ground4.color = 3
+warp.color = 13
+slide.color = 6
+spike.color = 11
+fire1.color = 12
+fire2.color = 4
+fire3.color = 12
+prpn.color = 15
+statline.color = 14
+torch.color = 14
+pole.color = 14
+'---
+
+hero$ = ""
+r.hero$ = hero$
+lives = 10
+sound.stat = 1
+ON KEY(10) GOSUB Finished
+KEY(10) ON
+IntroVid
+
+FOR level = start.place TO levels
+'‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹‹
+level$ = LTRIM$(STR$(level))
+file$ = "LEV_" + level$ + ".DAT"
+o.n = 0
+f.n = 0
+o.char.count = 0
+o.char$ = "ï"
+
+OPEN file$ FOR INPUT AS #1
+    INPUT #1, level.title$
+    FOR curr.line = 1 TO 30
+        INPUT #1, l$(curr.line)
+    NEXT curr.line
+CLOSE #1
+
+CLS : SCREEN 12
+WHILE INKEY$ <> "": WEND
+COLOR 15
+LOCATE 10, 10: PRINT level.title$;
+SLEEP 3
+WHILE INKEY$ <> "": WEND
+    FOR curr.line = 1 TO 28
+        LOCATE curr.line, 1
+        PRINT l$(curr.line);
+    NEXT curr.line
+    LOCATE 1, 69: PRINT "Reading...";
+
+FOR c.row = 1 TO 28
+   FOR c.col = 1 TO 80
+      'SOUND 0, .1
+      c.char$ = CHR$(SCREEN(c.row, c.col))
+      SELECT CASE c.char$
+         CASE IS = "€"
+            COLOR ground.color
+            char.att = INT(RND * 3) + 1
+              IF char.att = 1 THEN c.char$ = "€"
+              IF char.att = 2 THEN c.char$ = "±"
+              IF char.att = 3 THEN c.char$ = "≤"
+         CASE IS = "±"
+            COLOR ground4.color
+         CASE IS = "≤"
+            'c.char$ = "€"
+            COLOR ground3.color
+         CASE IS = "ﬂ"
+            COLOR ground2.color
+         CASE IS = "T"
+            COLOR torch.color
+            c.char$ = ""
+         CASE IS = "P"
+            COLOR pole.color
+            c.char$ = "≥"
+         CASE IS = "S"
+            COLOR ground2.color
+            c.char$ = "€"
+         CASE IS = "\"
+            COLOR slide.color
+         CASE IS = "/"
+            COLOR slide.color
+         CASE IS = ""
+            COLOR hero.color
+         CASE IS = "∞"
+            COLOR warp.color
+         CASE IS = "≥"
+            COLOR spike.color
+         CASE ELSE
+            COLOR ground.color
+      END SELECT
+      LOCATE c.row, c.col: PRINT c.char$;
+   NEXT c.col
+NEXT c.row
+
+el.stat = 0
+FOR c.line = 1 TO 28
+    FOR c.col = 1 TO 80
+         c.char$ = CHR$(SCREEN(c.line, c.col))
+         IF c.char$ = "O" THEN
+             IF o.n >= 10 THEN LOCATE c.line, c.col: PRINT " ";
+             IF o.n < 10 THEN
+                o.n = o.n + 1
+                o.c(o.n) = c.col: o.r(o.n) = c.line
+             END IF
+         END IF
+         IF c.char$ = "F" THEN
+             IF f.n >= 10 THEN LOCATE f.line, f.col: PRINT " ";
+             IF f.n < 10 THEN
+                f.n = f.n + 1
+                f.c(f.n) = c.col: f.r(f.n) = c.line
+             END IF
+         END IF
+         IF c.char$ = "" THEN
+             my.row = c.line: my.col = c.col
+             start.row = c.line: start.col = c.col
+         END IF
+         IF c.char$ = "" THEN
+             el.stat = 1
+             el.row = c.line: el.col = c.col
+         END IF
+    NEXT c.col
+NEXT c.line
+lev.stat$ = ""
+FOR o = 1 TO o.n
+   o.move(o) = 0
+   move.num(o) = 5
+NEXT o
+WHILE INKEY$ <> "": WEND
+
+DO
+fire.pos = fire.pos + 1
+IF fire.pos > 3 THEN fire.pos = 1
+FOR f = 1 TO f.n
+LOCATE f.r(f), f.c(f)
+  f.color = INT(RND * 3) + 1
+  IF f.color = 1 THEN f.color = fire1.color
+  IF f.color = 2 THEN f.color = fire2.color
+  IF f.color = 3 THEN f.color = fire3.color
+  COLOR f.color
+IF fire.pos = 1 THEN PRINT ".";
+IF fire.pos = 2 THEN PRINT "˘";
+IF fire.pos = 3 THEN
+   p = INT(RND * 2) + 1
+   IF p = 1 THEN PRINT "'";
+   IF p = 2 THEN PRINT "`";
+END IF
+NEXT f
+
+o.char.count = o.char.count + 1
+IF o.char.count = 3 THEN
+   o.char.count = 0
+   IF o.char$ = "ï" THEN o.char$ = "¢" ELSE o.char$ = "ï"
+END IF
+
+FOR o = 1 TO o.n
+   IF o.r(o) <> 0 AND o.c(o) <> 0 THEN
+      COLOR o.color
+      LOCATE o.r(o), o.c(o)
+      PRINT o.char$;
+   END IF
+NEXT o
+LOCATE 1, 69: PRINT "          ";
+COLOR statline.color
+LOCATE 30, 1: PRINT "Lives ="; lives, "Level ="; level, "Score ="; score;
+SOUND 0, 1
+COLOR hero.color
+LOCATE my.row, my.col: PRINT hero$;
+
+IF el.stat = 1 THEN
+   LOCATE el.row, el.col: COLOR (INT(RND * 15) + 1): PRINT "";
+END IF
+
+new.row = my.row: new.col = my.col
+IF up.count > 0 THEN up.count = up.count - 1
+ch.char$ = CHR$(SCREEN(my.row + 1, my.col))
+
+IF ch.char$ = "€" OR ch.char$ = "ﬂ" OR ch.char$ = "±" OR ch.char$ = "≤" THEN up.count = 0
+
+IF up.count = 0 THEN
+   IF ch.char$ <> "€" AND ch.char$ <> "ﬂ" AND ch.char$ <> "\" AND ch.char$ <> "/" AND ch.char$ <> "±" AND ch.char$ <> "≤" THEN
+      new.row = my.row + 1: IF new.row > 29 THEN GOSUB die
+      IF ch.char$ = "∞" THEN lev.stat$ = "DONE"
+   END IF
+   IF ch.char$ = "\" THEN
+      new.row = my.row + 1: new.col = my.col + 1: IF new.row > 29 THEN GOSUB die
+      IF CHR$(SCREEN(new.row, new.col)) = "∞" THEN lev.stat$ = "DONE"
+   END IF
+   IF ch.char$ = "/" THEN
+      new.row = my.row + 1: new.col = my.col - 1: IF new.row > 29 THEN GOSUB die
+      IF CHR$(SCREEN(new.row, new.col)) = "∞" THEN lev.stat$ = "DONE"
+   END IF
+END IF
+
+'WHILE INKEY$ <> "": WEND
+
+SELECT CASE UCASE$(INKEY$)
+    CASE IS = CHR$(0) + "M"      'right
+        IF CHR$(SCREEN(my.row, my.col + 1)) = "∞" THEN lev.stat$ = "DONE"
+        new.col = my.col + 1
+    CASE IS = CHR$(0) + "K"      'left
+        IF CHR$(SCREEN(my.row, my.col - 1)) = "∞" THEN lev.stat$ = "DONE"
+        new.col = my.col - 1
+    CASE IS = " "
+        IF up.count = 0 THEN
+           ch.char$ = CHR$(SCREEN(my.row + 1, my.col))
+           IF ch.char$ = "€" OR ch.char$ = "ﬂ" OR ch.char$ = "\" OR ch.char$ = "/" OR ch.char$ = "±" OR ch.char$ = "≤" THEN
+              up.count = 16
+              IF my.row > 1 THEN new.row = my.row - 1
+           END IF
+        END IF
+    CASE IS = "S"
+        IF sound.stat = 0 THEN sound.stat = 1 ELSE sound.stat = 0
+    CASE IS = "B"
+        r$ = CHR$(SCREEN(my.row, my.col + 1))
+        l$ = CHR$(SCREEN(my.row, my.col - 1))
+        COLOR prpn.color
+        LOCATE my.row, my.col: PRINT "";
+        SOUND 0, 2
+        IF r$ = " " OR r$ = "ï" OR r$ = "¢" THEN
+           FOR o = 1 TO o.n
+               IF o.r(o) = my.row AND o.c(o) = my.col + 1 THEN
+               COLOR 4
+               LOCATE o.r(o), o.c(o): PRINT "_";
+               o.r(o) = 0: o.c(o) = 0
+               IF sound.stat = 1 THEN SOUND 80, 2
+               score = score + 50
+               END IF
+           NEXT o
+        END IF
+        IF l$ = " " OR l$ = "ï" OR l$ = "¢" THEN
+           FOR o = 1 TO o.n
+               IF o.r(o) = my.row AND o.c(o) = my.col - 1 THEN
+               COLOR 4
+               LOCATE o.r(o), o.c(o): PRINT "_";
+               o.r(o) = 0: o.c(o) = 0
+               IF sound.stat = 1 THEN SOUND 80, 2
+               score = score + 50
+               END IF
+           NEXT o
+        END IF
+END SELECT
+WHILE INKEY$ <> "": WEND
+
+FOR o = 1 TO o.n
+   o.move(o) = o.move(o) + 1
+   IF o.move(o) = move.num(o) THEN
+      o.move(o) = 0
+      move.num(o) = INT(RND * 20) + 1
+      
+      IF o.r(o) <> 0 AND o.c(o) <> 0 THEN
+         new.oc = INT(RND * 3) - 1
+         ch.char1$ = CHR$(SCREEN(o.r(o), o.c(o) + new.oc))
+         ch.char2$ = CHR$(SCREEN(o.r(o) + 1, o.c(o) + new.oc))
+         IF ch.char1$ = " " AND ch.char2$ <> " " THEN
+            LOCATE o.r(o), o.c(o): PRINT " ";
+            o.c(o) = o.c(o) + new.oc
+         END IF
+      END IF
+   END IF
+NEXT o
+
+FOR o = 1 TO o.n
+   IF my.row = o.r(o) AND my.col = o.c(o) THEN GOSUB die
+   IF new.row = o.r(o) AND new.col = o.c(o) THEN GOSUB die
+NEXT o
+FOR f = 1 TO f.n
+   IF my.row = f.r(f) AND my.col = f.c(f) THEN GOSUB die
+   IF new.row = f.r(f) AND new.col = f.c(f) THEN GOSUB die
+NEXT f
+
+'IF CHR$(SCREEN(my.row, my.col + 1)) = "-" THEN LOCATE my.row, my.col + 1: PRINT " ";
+'IF CHR$(SCREEN(my.row, my.col - 1)) = "-" THEN LOCATE my.row, my.col - 1: PRINT " ";
+
+IF new.row <> my.row OR new.col <> my.col THEN
+    ch.char$ = CHR$(SCREEN(new.row, new.col))
+    IF ch.char$ = "≥" THEN GOSUB die
+    IF ch.char$ = "€" THEN new.row = my.row: new.col = my.col
+    IF ch.char$ = "±" THEN new.row = my.row: new.col = my.col
+    IF ch.char$ = "≤" THEN new.row = my.row: new.col = my.col
+    IF ch.char$ = "ﬂ" THEN new.row = my.row: new.col = my.col
+    IF ch.char$ = "/" THEN new.row = my.row: new.col = my.col
+    IF ch.char$ = "\" THEN new.row = my.row: new.col = my.col
+    IF ch.char$ = "›" THEN new.row = my.row: new.col = my.col
+    IF ch.char$ = "ﬁ" THEN new.row = my.row: new.col = my.col
+    IF ch.char$ = "" THEN
+       LOCATE my.row, my.col: PRINT " ";
+       LOCATE el.row, el.col: COLOR hero.color: PRINT hero$;
+       IF sound.stat = 1 THEN PLAY "MF T200 O1 L64 CDEFGAB>CDEFGAB>C"
+       lives = lives + 1
+       el.stat = 0
+    END IF
+   
+    LOCATE my.row, my.col: PRINT " ";
+    my.row = new.row: my.col = new.col
+    COLOR hero.color
+    LOCATE my.row, my.col: PRINT hero$
+END IF
+IF lives < 0 THEN EXIT DO
+LOOP UNTIL lev.stat$ = "DONE"
+IF lives < 0 THEN EXIT FOR
+'ﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂﬂ
+NEXT level
+IF lives < 0 THEN DeadVid
+IF lives < 0 THEN RUN
+
+IF level = 9 THEN RUN "W1_BOSS.DAT"
+
+
+Finished:
+'pause
+SYSTEM
+RETURN
+
+die:
+IF sound.stat = 1 THEN SOUND 57, 10
+new.row = start.row
+new.col = start.col
+lives = lives - 1
+RETURN
+
+SUB DeadVid
+WHILE INKEY$ <> "": WEND
+CLS : SCREEN 12
+m$ = "Game Over"
+FOR col = 1 TO LEN(m$)
+   char$ = RIGHT$(LEFT$(m$, col), 1)
+   FOR row = 1 TO 14
+      IF row > 1 THEN LOCATE row - 1, col + 30: PRINT " ";
+      LOCATE row, col + 30: PRINT char$;
+      SOUND 0, .5
+   NEXT row
+NEXT col
+WHILE INKEY$ <> "": WEND
+Pause
+END SUB
+
+SUB IntroVid
+CLS : SCREEN 12
+m$ = "ASCII-MAN  "
+WHILE INKEY$ <> "": WEND
+FOR col = 1 TO LEN(m$)
+   char$ = RIGHT$(LEFT$(m$, col), 1)
+   FOR row = 1 TO 14
+      IF char$ <> "" THEN COLOR 10 ELSE COLOR 14
+      IF row > 1 THEN LOCATE row - 1, col + 30: PRINT " ";
+      LOCATE row, col + 30: PRINT char$;
+      SOUND 0, .5
+      IF INKEY$ <> "" THEN EXIT SUB
+   NEXT row
+NEXT col
+
+COLOR 9
+FOR col = 1 TO 80
+LOCATE 20, col: PRINT "ƒ";
+SOUND 0, .1
+IF INKEY$ <> "" THEN EXIT SUB
+NEXT col
+FOR col = 1 TO 80
+LOCATE 10, col: PRINT "ƒ";
+SOUND 0, .1
+IF INKEY$ <> "" THEN EXIT SUB
+NEXT col
+
+COLOR 14
+FOR col = 42 TO 80
+LOCATE 14, col - 1: PRINT " ";
+LOCATE 14, col: PRINT "";
+SOUND 0, 1
+IF INKEY$ <> "" THEN EXIT SUB
+NEXT col
+LOCATE 14, 80: PRINT " ";
+
+FOR i = 1 TO 270
+r = INT(RND * 6) + 1
+c = INT(RND * 9) + 35
+COLOR (INT(RND * 15) + 1)
+LOCATE r, c: PRINT CHR$(INT(RND * 200) + 50);
+SOUND 0, .1
+IF INKEY$ <> "" THEN EXIT SUB
+NEXT i
+
+COLOR 14
+LOCATE 1, 35: PRINT "  ‹€€€‹  ";
+LOCATE 2, 35: PRINT "‹€€˛€˛€€‹";
+LOCATE 3, 35: PRINT "€€€€€€€€€";
+LOCATE 4, 35: PRINT "€€ ﬂﬂﬂ €€";
+LOCATE 5, 35: PRINT "ﬂ€€   €€ﬂ";
+LOCATE 6, 35: PRINT "  ﬂ€€€ﬂ  ";
+
+COLOR 15
+LOCATE 28, 30: PRINT "Press Any Key To Begin";
+Pause
+END SUB
+
+DEFSNG A-Z
+SUB Pause
+SLEEP
+WHILE INKEY$ <> "": WEND
+END SUB
+

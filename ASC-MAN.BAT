@@ -1,0 +1,2 @@
+@QBASIC /RUN ASC-MAN.BAS
+
