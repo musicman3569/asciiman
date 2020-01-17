@@ -202,6 +202,13 @@ SUB ParseLevelData
     NEXT row
 END SUB
 
+'--------------------------------------------------------------------------
+' Returns the CHAR_COLLISION_{collision_type} constant that specifies
+' the collision behavior for a character.
+'
+' @param char$ Character to get the collision behavior for
+' @return Returns one of the CHAR_COLLISION global constants.
+'--------------------------------------------------------------------------
 FUNCTION GetCharCollision (char$)
     SELECT CASE char$
         CASE " "
@@ -222,9 +229,20 @@ FUNCTION GetCharCollision (char$)
     END SELECT
 END FUNCTION
 
+'--------------------------------------------------------------------------
+' Returns the SPRITE_TYPE_{sprite_type} constant that specifies
+' the which type of sprite a character is.
+'
+' @param char$ Character to determing the sprite type for.
+' @return Returns one of the SPRITE_TYPE global constants.
+'--------------------------------------------------------------------------
 FUNCTION GetSpriteType (char$)
     '--- TODO: Use the Sprite templates to check char by searching for char$ in the Sprite.frames
 END FUNCTION
+
+'==========================================================================
+'                     GENERIC UTILITY FUNCTIONS
+'==========================================================================
 
 '--------------------------------------------------------------------------
 ' Clear the keyboard input buffer.
