@@ -292,6 +292,9 @@ FOR level = start.place TO levels
             SELECT CASE CHR$(SCREEN(new.row, new.col))
                 CASE " "
                 CASE "_"
+                CASE "`"
+                CASE "'"
+                CASE "."
                 CASE "³"
                     GOSUB die
                 CASE "/"
