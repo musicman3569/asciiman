@@ -25,9 +25,13 @@ DIM SHARED CLR_LT_WHITE: CLR_LT_WHITE = 15
 '--- Sprite Type Constants: Used to identify select Sprite structs.
 DIM SHARED SPRITE_TYPE_NONE: SPRITE_TYPE_NONE = 0
 DIM SHARED SPRITE_TYPE_PLAYER: SPRITE_TYPE_PLAYER = 1
-DIM SHARED SPRITE_TYPE_ENEMY1: SPRITE_TYPE_ENEMY1 = 2
-DIM SHARED SPRITE_TYPE_FIRE: SPRITE_TYPE_FIRE = 3
-DIM SHARED SPRITE_TYPE_EXTRA_LIFE: SPRITE_TYPE_EXTRA_LIFE = 4
+DIM SHARED SPRITE_TYPE_PLAYER_SPIKEBALL: SPRITE_TYPE_PLAYER_SPIKEBALL = 2
+DIM SHARED SPRITE_TYPE_PLAYER_DRAINED: SPRITE_TYPE_PLAYER_DRAINED = 3
+DIM SHARED SPRITE_TYPE_ENEMY1: SPRITE_TYPE_ENEMY1 = 4
+DIM SHARED SPRITE_TYPE_FIRE: SPRITE_TYPE_FIRE = 5
+DIM SHARED SPRITE_TYPE_EXTRA_LIFE: SPRITE_TYPE_EXTRA_LIFE = 6
+'--- Highest index of the SPRINT_TYPE constants above.
+DIM SHARED SPRITE_TYPES_MAX: SPRITE_TYPES_MAX = 6
 
 '--- Sprite Movement Type Constants: Used to determine how sprites are moved.
 DIM SHARED SPRITE_MOVE_NONE: SPRITE_MOVE_NONE = 0
@@ -44,6 +48,11 @@ DIM SHARED CHAR_COLLISION_NEXT_LEVEL: CHAR_COLLISION_NEXT_LEVEL = 5
 DIM SHARED CHAR_COLLISION_PUSH_LEFT: CHAR_COLLISION_PUSH_LEFT = 6
 DIM SHARED CHAR_COLLISION_PUSH_RIGHT: CHAR_COLLISION_PUSH_RIGHT = 7
 
+TYPE Coord
+    row AS INTEGER
+    col AS INTEGER
+END TYPE
+
 '--- Main data type for configuring all game sprites
 TYPE Sprite
     spriteType AS INTEGER '--- Use SPRITE_TYPE_{...} constant. Defines the type of sprite.
@@ -57,6 +66,9 @@ TYPE Sprite
     charColor AS INTEGER '--- Use CLR_{...} constant.  Defines sprite color.
     gravity AS INTEGER '--- 1 = sprite affected by gravity, 0 = sprite not affected by gravity, -1 = sprite floats up
     gravityTimer AS INTEGER '--- Number of game frames to suspend gravity effects.
+    nextSpriteType AS INTEGER '--- Use SPRITE_TYPE_{...} constant. Changes the current sprite to this SPRITE_TYPES template. SPRITE_TYPE_NONE = no change.
+    nextSpriteTypeTimer AS INTEGER '--- Number of frames to wait before changing the sprite to the value in nextSpriteType.
+    lives AS INTEGER '--- Stores the health of number of lives remaining for a sprite.
     row AS INTEGER '--- Row on the SCREEN to render sprite. Range 1 to MAX_ROWS, or 0 to disable sprite.
     col AS INTEGER '--- Column on the SCREEN to render sprite. Range 1 to MAX_COLS, or 0 to disable sprite.
 END TYPE
@@ -66,14 +78,15 @@ END TYPE
 '--------------------------------------------------------------------------
 DIM SHARED SPRITES(200) AS Sprite
 DIM SHARED SPRITE_COUNT: SPRITE_COUNT = 0 '--- Number of active sprites.  Increment as they are added.
+DIM SHARED PLAYER(4) AS INTEGER '--- Stores the index values of the player sprites in the SPRITES() array.
+DIM SHARED PLAYER_MAX: PLAYER_MAX = 0 '--- Number of active players in the game
 
 '--------------------------------------------------------------------------
 ' Array with 1 of each SPRITE_TYPE_{...} as the index.
 ' Used as templates for making new sprites, and for getting the attributes
 ' of each SPRITE_TYPE_{...}
 '--------------------------------------------------------------------------
-DIM SHARED SPRITE_TYPES(5) AS Sprite
-DIM SHARED SPRITE_TYPES_MAX: SPRITE_TYPES_MAX = 4 '--- Highest index of the SPRINT_TYPES array below.
+DIM SHARED SPRITE_TYPES(SPRITE_TYPES_MAX + 1) AS Sprite
 '--- Null Sprite template
 SPRITE_TYPES(SPRITE_TYPE_NONE).spriteType = SPRITE_TYPE_NONE
 '--- Player Sprite template
@@ -86,6 +99,30 @@ SPRITE_TYPES(SPRITE_TYPE_PLAYER).charCollision = CHAR_COLLISION_SOLID
 SPRITE_TYPES(SPRITE_TYPE_PLAYER).charColor = CLR_YELLOW
 SPRITE_TYPES(SPRITE_TYPE_PLAYER).gravity = 1
 SPRITE_TYPES(SPRITE_TYPE_PLAYER).gravityTimer = 0
+'--- Player Spikeball Sprite template
+SPRITE_TYPES(SPRITE_TYPE_PLAYER_SPIKEBALL).spriteType = SPRITE_TYPE_PLAYER_SPIKEBALL
+SPRITE_TYPES(SPRITE_TYPE_PLAYER_SPIKEBALL).moveType = SPRITE_MOVE_NONE
+SPRITE_TYPES(SPRITE_TYPE_PLAYER_SPIKEBALL).frames = ""
+SPRITE_TYPES(SPRITE_TYPE_PLAYER_SPIKEBALL).maxFrame = 1
+SPRITE_TYPES(SPRITE_TYPE_PLAYER_SPIKEBALL).frameRate = 0
+SPRITE_TYPES(SPRITE_TYPE_PLAYER_SPIKEBALL).charCollision = CHAR_COLLISION_SOLID
+SPRITE_TYPES(SPRITE_TYPE_PLAYER_SPIKEBALL).charColor = CLR_LT_WHITE
+SPRITE_TYPES(SPRITE_TYPE_PLAYER_SPIKEBALL).gravity = 1
+SPRITE_TYPES(SPRITE_TYPE_PLAYER_SPIKEBALL).gravityTimer = 0
+SPRITE_TYPES(SPRITE_TYPE_PLAYER_SPIKEBALL).nextSpriteType = SPRITE_TYPE_PLAYER_DRAINED
+SPRITE_TYPES(SPRITE_TYPE_PLAYER_SPIKEBALL).nextSpriteTypeTimer = 5
+'--- Player Drained Sprite template (can't use attacks)
+SPRITE_TYPES(SPRITE_TYPE_PLAYER_DRAINED).spriteType = SPRITE_TYPE_PLAYER_DRAINED
+SPRITE_TYPES(SPRITE_TYPE_PLAYER_DRAINED).moveType = SPRITE_MOVE_PLAYER_CONTROLLED
+SPRITE_TYPES(SPRITE_TYPE_PLAYER_DRAINED).frames = ""
+SPRITE_TYPES(SPRITE_TYPE_PLAYER_DRAINED).maxFrame = 1
+SPRITE_TYPES(SPRITE_TYPE_PLAYER_DRAINED).frameRate = 0
+SPRITE_TYPES(SPRITE_TYPE_PLAYER_DRAINED).charCollision = CHAR_COLLISION_SOLID
+SPRITE_TYPES(SPRITE_TYPE_PLAYER_DRAINED).charColor = CLR_LT_RED
+SPRITE_TYPES(SPRITE_TYPE_PLAYER_DRAINED).gravity = 1
+SPRITE_TYPES(SPRITE_TYPE_PLAYER_DRAINED).gravityTimer = 0
+SPRITE_TYPES(SPRITE_TYPE_PLAYER_DRAINED).nextSpriteType = SPRITE_TYPE_PLAYER
+SPRITE_TYPES(SPRITE_TYPE_PLAYER_DRAINED).nextSpriteTypeTimer = 12
 '---  Enemy1 Sprite template
 SPRITE_TYPES(SPRITE_TYPE_ENEMY1).spriteType = SPRITE_TYPE_ENEMY1
 SPRITE_TYPES(SPRITE_TYPE_ENEMY1).moveType = SPRITE_MOVE_LR_RANDOM_GROUND
@@ -252,6 +289,7 @@ END SUB
 ' @return Returns one of the CHAR_COLLISION global constants.
 '--------------------------------------------------------------------------
 FUNCTION GetCharCollision (char$)
+    '--- Non-sprite collisions
     SELECT CASE char$
         CASE " "
             GetCharCollision = CHAR_COLLISION_NONE
@@ -266,6 +304,7 @@ FUNCTION GetCharCollision (char$)
         CASE "³"
             GetCharCollision = CHAR_COLLISION_DEATH
         CASE ELSE
+            '--- Sprite collisions
             spriteType = GetSpriteType(char$)
             IF spriteType THEN
                 GetCharCollision = SPRITE_TYPES(spriteType).charCollision
@@ -274,6 +313,80 @@ FUNCTION GetCharCollision (char$)
             END IF
     END SELECT
 END FUNCTION
+
+'--------------------------------------------------------------------------
+' Process movement for all active sprites.
+'--------------------------------------------------------------------------
+SUB MoveSprites
+    '--- TODO: Now working/unfinished, going to rewrite with Coord structs and sprite velocity
+    DIM sprite AS Sprite
+    moveRows = 0
+    moveCols = 0
+
+    FOR index = 0 TO SPRITE_COUNT - 1
+        SELECT CASE sprite.moveType
+            CASE SPRITE_MOVE_PLAYER_CONTROLLED
+            CASE SPRITE_MOVE_LR_RANDOM_GROUND
+                moveCols = moveCols + INT(RND * 3) - 1
+        END SELECT
+
+        '--- Apply gravity based on sprite settings
+        IF sprite.gravityTimer = 0 THEN
+            IF sprite.gravity THEN moveRows = moveRows + 1
+        ELSE
+            sprite.gravityTimer = sprite.gravityTimer - 1
+        END IF
+
+        '--- Move sprite after all movements have been calculated
+        MoveSpriteToward index, sprite.row + moveRows, sprite.col + moveCols
+    NEXT index
+END SUB
+
+SUB MoveSpriteToward (spriteIndex, row, col)
+    '--- TODO: Rewrite using sprite velocity
+    DIM sprite AS Sprite
+    sprite = SPRITES(spriteIndex)
+
+    '--- Get the distance (in character units) to the target row/col
+    rowStepsRemaining = sprite.row - row
+    colStepsRemaining = sprite.col - col
+    stepsRemaining = GetMax(ABS(rowStepsRemaining), ABS(colStepsRemaining))
+
+    IF stepsRemaining > 0 THEN
+        '--- Move one unit toward the target row/col in a straight line
+        newRow = sprite.row + CINT(rowStepsRemaining / stepsRemaining)
+        newCol = sprite.col + CINT(colStepsRemaining / stepsRemaining)
+
+        '--- Treat collisions with the screen boundaries as solid objects
+        IF newRow > MAX_ROWS OR newRow < 1 OR newCol > MAX_COLS OR newCol < 1 THEN
+            collisionType = CHAR_COLLISION_SOLID
+        ELSE
+            HandleSpriteCollision spriteIndex, newRow, newCol
+        END IF
+    END IF
+END SUB
+
+SUB HandleSpriteCollision (spriteIndex, row, col)
+    '--- TODO: Unfinished. Rewrite using sprite velocity
+    DIM sprite AS Sprite
+    sprite = SPRITES(spriteIndex)
+
+    collisionType = GetCharCollision(CharAt$(newRow, newCol))
+    moveRows = 0
+    moveCols = 0
+
+    '--- Handle collision types that affect movement
+    SELECT CASE collisionType
+        CASE CHAR_COLLISION_SOLID
+
+        CASE CHAR_COLLISION_PUSH_LEFT
+            'TODO: Change sprite velocity?
+        CASE CHAR_COLLISION_PUSH_RIGHT
+
+        CASE ELSE
+
+    END SELECT
+END SUB
 
 '--------------------------------------------------------------------------
 ' Renders all active sprites to the screen and updates their animation frames.
@@ -304,6 +417,13 @@ SUB RenderSprites
     NEXT index
 END SUB
 
+'--------------------------------------------------------------------------
+' Returns the next charColor property value for a Sprite to be rendered
+' based on its spriteType property.
+'
+' @param sprite Sprite being animated.
+' @return New value to be assigned to the sprite's charColor.
+'--------------------------------------------------------------------------
 FUNCTION AnimateSpriteColor (sprite AS Sprite)
     SELECT CASE sprite.spriteType
         CASE SPRITE_TYPE_FIRE
@@ -339,6 +459,12 @@ SUB AddSprite (spriteType%, row%, col%)
     '--- Set the sprite position
     SPRITES(SPRITE_COUNT).row = row%
     SPRITES(SPRITE_COUNT).col = col%
+
+    '--- Register the SPRITES() index value of player sprites so we know which ones they are.
+    IF spriteType% = SPRITE_TYPE_PLAYER THEN
+        PLAYER(PLAYER_MAX) = SPRITE_COUNT
+        PLAYER_MAX = PLAYER_MAX + 1
+    END IF
 
     '--- Update sprite count so we know how many there are
     SPRITE_COUNT = SPRITE_COUNT + 1
@@ -415,6 +541,15 @@ END SUB
 FUNCTION CharAt$ (row, col)
     CharAt$ = CHR$(SCREEN(row, col))
 END FUNCTION
+
+FUNCTION GetMax (valueA, valueB)
+    IF (valueA > valueB) THEN GetMax = valueA ELSE GetMax = valueB
+END FUNCTION
+
+FUNCTION GetMin (valueA, valueB)
+    IF (valueA < valueB) THEN GetMin = valueA ELSE GetMin = valueB
+END FUNCTION
+
 
 '--------------------------------------------------------------------------
 ' Clears the screen, displays a message, and terminates the program.
