@@ -1,8 +1,8 @@
 DEFINT A-Z
 
 '--- Global Constants
-DIM SHARED MAX_ROWS: MAX_ROWS = 28
-DIM SHARED MAX_COLS: MAX_COLS = 80
+DIM SHARED MAX_ROWS: MAX_ROWS = 28 '--- Game play area height, leaves 2 rows for stats
+DIM SHARED MAX_COLS: MAX_COLS = 80 '--- Game play area width
 
 '--- Color Palette Aliases
 DIM SHARED CLR_BLACK: CLR_BLACK = 0
@@ -22,19 +22,19 @@ DIM SHARED CLR_LT_MAGENTA: CLR_LT_MAGENTA = 13
 DIM SHARED CLR_YELLOW: CLR_YELLOW = 14
 DIM SHARED CLR_LT_WHITE: CLR_LT_WHITE = 15
 
-'--- Sprite Type Constants
+'--- Sprite Type Constants: Used to identify select Sprite structs.
 DIM SHARED SPRITE_TYPE_NONE: SPRITE_TYPE_NONE = 0
 DIM SHARED SPRITE_TYPE_PLAYER: SPRITE_TYPE_PLAYER = 1
 DIM SHARED SPRITE_TYPE_ENEMY1: SPRITE_TYPE_ENEMY1 = 2
 DIM SHARED SPRITE_TYPE_FIRE: SPRITE_TYPE_FIRE = 3
 DIM SHARED SPRITE_TYPE_EXTRA_LIFE: SPRITE_TYPE_EXTRA_LIFE = 4
 
-'--- Sprite Movement Type Constants
+'--- Sprite Movement Type Constants: Used to determine how sprites are moved.
 DIM SHARED SPRITE_MOVE_NONE: SPRITE_MOVE_NONE = 0
 DIM SHARED SPRITE_MOVE_PLAYER_CONTROLLED: SPRITE_MOVE_PLAYER_CONTROLLED = 1
 DIM SHARED SPRITE_MOVE_LR_RANDOM_GROUND: SPRITE_MOVE_LR_RANDOM_GROUND = 2
 
-'--- Character Collision Behavior Constants
+'--- Character Collision Behavior Constants: Used to determine player collision behavior
 DIM SHARED CHAR_COLLISION_NONE: CHAR_COLLISION_NONE = 0
 DIM SHARED CHAR_COLLISION_SOLID: CHAR_COLLISION_SOLID = 1
 DIM SHARED CHAR_COLLISION_DEATH: CHAR_COLLISION_DEATH = 2
@@ -46,17 +46,19 @@ DIM SHARED CHAR_COLLISION_PUSH_RIGHT: CHAR_COLLISION_PUSH_RIGHT = 7
 
 '--- Main data type for configuring all game sprites
 TYPE Sprite
-    spriteType AS INTEGER
-    moveType AS INTEGER
-    frames AS STRING
-    frame AS INTEGER
-    maxFrame AS INTEGER
-    frameRate AS INTEGER
-    frameRateTimer AS INTEGER
-    charCollision AS INTEGER
-    charColor AS INTEGER
-    row AS INTEGER
-    col AS INTEGER
+    spriteType AS INTEGER '--- Use SPRITE_TYPE_{...} constant. Defines the type of sprite.
+    moveType AS INTEGER '--- Use SPRITE_MOVE_{...} constant. Defines sprite movement behavior.
+    frames AS STRING '--- String containing 1 or more characters used to render the sprite, in animation order.
+    frame AS INTEGER '--- Current animation frame. Stores index of the char to display from the frames property. Range 1 to maxFrame.
+    maxFrame AS INTEGER '--- Length of the frames property
+    frameRate AS INTEGER '--- Number of game frames between Sprite animation frames.
+    frameRateTimer AS INTEGER '--- Tracks frames between Sprite animations. Decrements from frameRate to 0.
+    charCollision AS INTEGER '--- Use CHAR_COLLISION_{...} constant. Defines sprite collision behavior.
+    charColor AS INTEGER '--- Use CLR_{...} constant.  Defines sprite color.
+    gravity AS INTEGER '--- 1 = sprite affected by gravity, 0 = sprite not affected by gravity, -1 = sprite floats up
+    gravityTimer AS INTEGER '--- Number of game frames to suspend gravity effects.
+    row AS INTEGER '--- Row on the SCREEN to render sprite. Range 1 to MAX_ROWS, or 0 to disable sprite.
+    col AS INTEGER '--- Column on the SCREEN to render sprite. Range 1 to MAX_COLS, or 0 to disable sprite.
 END TYPE
 
 '--------------------------------------------------------------------------
@@ -71,12 +73,55 @@ DIM SHARED SPRITE_COUNT: SPRITE_COUNT = 0 '--- Number of active sprites.  Increm
 ' of each SPRITE_TYPE_{...}
 '--------------------------------------------------------------------------
 DIM SHARED SPRITE_TYPES(5) AS Sprite
-DIM SHARED SPRITE_TYPES_MAX: SPRITE_TYPES_MAX = 4 '--- Highest value of all the SPRINT_TYPE_{} constants
+DIM SHARED SPRITE_TYPES_MAX: SPRITE_TYPES_MAX = 4 '--- Highest index of the SPRINT_TYPES array below.
+'--- Null Sprite template
+SPRITE_TYPES(SPRITE_TYPE_NONE).spriteType = SPRITE_TYPE_NONE
+'--- Player Sprite template
+SPRITE_TYPES(SPRITE_TYPE_PLAYER).spriteType = SPRITE_TYPE_PLAYER
+SPRITE_TYPES(SPRITE_TYPE_PLAYER).moveType = SPRITE_MOVE_PLAYER_CONTROLLED
+SPRITE_TYPES(SPRITE_TYPE_PLAYER).frames = ""
+SPRITE_TYPES(SPRITE_TYPE_PLAYER).maxFrame = 1
+SPRITE_TYPES(SPRITE_TYPE_PLAYER).frameRate = 0
+SPRITE_TYPES(SPRITE_TYPE_PLAYER).charCollision = CHAR_COLLISION_SOLID
+SPRITE_TYPES(SPRITE_TYPE_PLAYER).charColor = CLR_YELLOW
+SPRITE_TYPES(SPRITE_TYPE_PLAYER).gravity = 1
+SPRITE_TYPES(SPRITE_TYPE_PLAYER).gravityTimer = 0
+'---  Enemy1 Sprite template
+SPRITE_TYPES(SPRITE_TYPE_ENEMY1).spriteType = SPRITE_TYPE_ENEMY1
+SPRITE_TYPES(SPRITE_TYPE_ENEMY1).moveType = SPRITE_MOVE_LR_RANDOM_GROUND
+SPRITE_TYPES(SPRITE_TYPE_ENEMY1).frames = "•¢"
+SPRITE_TYPES(SPRITE_TYPE_ENEMY1).maxFrame = 2
+SPRITE_TYPES(SPRITE_TYPE_ENEMY1).frameRate = 5
+SPRITE_TYPES(SPRITE_TYPE_ENEMY1).charCollision = CHAR_COLLISION_DEATH
+SPRITE_TYPES(SPRITE_TYPE_ENEMY1).charColor = CLR_GREEN
+SPRITE_TYPES(SPRITE_TYPE_ENEMY1).gravity = 1
+SPRITE_TYPES(SPRITE_TYPE_ENEMY1).gravityTimer = 0
+'--- Fire Sprite template
+SPRITE_TYPES(SPRITE_TYPE_FIRE).spriteType = SPRITE_TYPE_FIRE
+SPRITE_TYPES(SPRITE_TYPE_FIRE).moveType = SPRITE_MOVE_NONE
+SPRITE_TYPES(SPRITE_TYPE_FIRE).frames = ".;'.;`"
+SPRITE_TYPES(SPRITE_TYPE_FIRE).maxFrame = 6
+SPRITE_TYPES(SPRITE_TYPE_FIRE).frameRate = 1
+SPRITE_TYPES(SPRITE_TYPE_FIRE).charCollision = CHAR_COLLISION_SOLID
+SPRITE_TYPES(SPRITE_TYPE_FIRE).charColor = CLR_LT_RED
+SPRITE_TYPES(SPRITE_TYPE_FIRE).gravity = 0
+SPRITE_TYPES(SPRITE_TYPE_FIRE).gravityTimer = 0
+'--- Extra Life Sprite Template
+SPRITE_TYPES(SPRITE_TYPE_EXTRA_LIFE).spriteType = SPRITE_TYPE_EXTRA_LIFE
+SPRITE_TYPES(SPRITE_TYPE_EXTRA_LIFE).moveType = SPRITE_MOVE_NONE
+SPRITE_TYPES(SPRITE_TYPE_EXTRA_LIFE).frames = ""
+SPRITE_TYPES(SPRITE_TYPE_EXTRA_LIFE).maxFrame = 1
+SPRITE_TYPES(SPRITE_TYPE_EXTRA_LIFE).frameRate = 0
+SPRITE_TYPES(SPRITE_TYPE_EXTRA_LIFE).charCollision = CHAR_COLLISION_EXTRA_LIFE
+SPRITE_TYPES(SPRITE_TYPE_EXTRA_LIFE).charColor = CLR_LT_CYAN
+SPRITE_TYPES(SPRITE_TYPE_EXTRA_LIFE).gravity = 0
+SPRITE_TYPES(SPRITE_TYPE_EXTRA_LIFE).gravityTimer = 0
 
-'--- Start Program Execution
+'--------------------------------------------------------------------------
+' Start Program Execution
+'--------------------------------------------------------------------------
 SetDisplayMode
-InitializeSpriteTypes
-StartGameLevel 1
+StartGameLevel 4
 SYSTEM
 
 '--------------------------------------------------------------------------
@@ -89,7 +134,7 @@ SUB StartGameLevel (gameLevel)
     ParseLevelData
 
     '--- TODO: Replace this with an actual game loop
-    FOR i = 1 TO 150
+    FOR i = 1 TO 100
         RenderSprites
         PrintAt 29, 1, 15, "SPRITE_COUNT:" + STR$(SPRITE_COUNT)
         _LIMIT 18
@@ -242,6 +287,7 @@ SUB RenderSprites
 
         '--- Only render on-screen sprites.
         IF currSprite.row > 0 AND currSprite.col > 0 THEN
+            SPRITES(index).charColor = AnimateSpriteColor(currSprite)
             PrintAt currSprite.row, currSprite.col, currSprite.charColor, MID$(currSprite.frames, currSprite.frame, 1)
 
             '--- Only animate sprite if framerate is above 0
@@ -258,6 +304,20 @@ SUB RenderSprites
     NEXT index
 END SUB
 
+FUNCTION AnimateSpriteColor (sprite AS Sprite)
+    SELECT CASE sprite.spriteType
+        CASE SPRITE_TYPE_FIRE
+            colorRandomizer = INT(RND * 2)
+            IF colorRandomizer = 0 THEN AnimateSpriteColor = CLR_RED
+            IF colorRandomizer = 1 THEN AnimateSpriteColor = CLR_LT_RED
+        CASE SPRITE_TYPE_EXTRA_LIFE
+            AnimateSpriteColor = (sprite.charColor + 1) MOD 15
+            IF AnimateSpriteColor = 0 THEN AnimateSpiteColor = 1
+        CASE ELSE
+            AnimateSpriteColor = sprite.charColor
+    END SELECT
+END FUNCTION
+
 '--------------------------------------------------------------------------
 ' Initializes a new sprit into the global SPRITES array and increments
 ' the SPRITE_COUNT so all initialized Sprites can be tracked.
@@ -267,21 +327,20 @@ END SUB
 ' @param col% Col of the sprite's starting position.
 '--------------------------------------------------------------------------
 SUB AddSprite (spriteType%, row%, col%)
+    '--- Clone sprite from the SPRITE_TYPE template
     DIM template AS Sprite
     template = SPRITE_TYPES(spriteType%)
+    SPRITES(SPRITE_COUNT) = template
 
-    SPRITES(SPRITE_COUNT).spriteType = template.spriteType
-    SPRITES(SPRITE_COUNT).moveType = template.moveType
-    SPRITES(SPRITE_COUNT).frames = template.frames
+    '--- Randomize frame positions and frameTimer so everything isn't in unison.
     SPRITES(SPRITE_COUNT).frame = INT(RND * template.maxFrame) + 1
-    SPRITES(SPRITE_COUNT).maxFrame = template.maxFrame
-    SPRITES(SPRITE_COUNT).frameRate = template.frameRate
     SPRITES(SPRITE_COUNT).frameRateTimer = INT(RND * template.frameRate)
-    SPRITES(SPRITE_COUNT).charCollision = template.charCollision
-    SPRITES(SPRITE_COUNT).charColor = template.charColor
+
+    '--- Set the sprite position
     SPRITES(SPRITE_COUNT).row = row%
     SPRITES(SPRITE_COUNT).col = col%
 
+    '--- Update sprite count so we know how many there are
     SPRITE_COUNT = SPRITE_COUNT + 1
 END SUB
 
@@ -305,48 +364,6 @@ FUNCTION GetSpriteType (char$)
         NEXT currSpriteType
     END IF
 END FUNCTION
-
-'--------------------------------------------------------------------------
-' Initializes the global SPRITE_TYPES() array with the Sprite templates
-' for each defined SPRITE_TYPE_{} constant.  Used for initializing sprites
-' with the correct starting values.
-'--------------------------------------------------------------------------
-SUB InitializeSpriteTypes
-    SPRITE_TYPES(SPRITE_TYPE_NONE).spriteType = SPRITE_TYPE_NONE
-
-    SPRITE_TYPES(SPRITE_TYPE_PLAYER).spriteType = SPRITE_TYPE_PLAYER
-    SPRITE_TYPES(SPRITE_TYPE_PLAYER).moveType = SPRITE_MOVE_PLAYER_CONTROLLED
-    SPRITE_TYPES(SPRITE_TYPE_PLAYER).frames = ""
-    SPRITE_TYPES(SPRITE_TYPE_PLAYER).maxFrame = 1
-    SPRITE_TYPES(SPRITE_TYPE_PLAYER).frameRate = 0
-    SPRITE_TYPES(SPRITE_TYPE_PLAYER).charCollision = CHAR_COLLISION_SOLID
-    SPRITE_TYPES(SPRITE_TYPE_PLAYER).charColor = CLR_YELLOW
-
-    SPRITE_TYPES(SPRITE_TYPE_ENEMY1).spriteType = SPRITE_TYPE_ENEMY1
-    SPRITE_TYPES(SPRITE_TYPE_ENEMY1).moveType = SPRITE_MOVE_LR_RANDOM_GROUND
-    SPRITE_TYPES(SPRITE_TYPE_ENEMY1).frames = "•¢"
-    SPRITE_TYPES(SPRITE_TYPE_ENEMY1).maxFrame = 2
-    SPRITE_TYPES(SPRITE_TYPE_ENEMY1).frameRate = 5
-    SPRITE_TYPES(SPRITE_TYPE_ENEMY1).charCollision = CHAR_COLLISION_DEATH
-    SPRITE_TYPES(SPRITE_TYPE_ENEMY1).charColor = CLR_GREEN
-
-    SPRITE_TYPES(SPRITE_TYPE_FIRE).spriteType = SPRITE_TYPE_FIRE
-    SPRITE_TYPES(SPRITE_TYPE_FIRE).moveType = SPRITE_MOVE_NONE
-    SPRITE_TYPES(SPRITE_TYPE_FIRE).frames = ".;'.;`"
-    SPRITE_TYPES(SPRITE_TYPE_FIRE).maxFrame = 6
-    SPRITE_TYPES(SPRITE_TYPE_FIRE).frameRate = 1
-    SPRITE_TYPES(SPRITE_TYPE_FIRE).charCollision = CHAR_COLLISION_SOLID
-    SPRITE_TYPES(SPRITE_TYPE_FIRE).charColor = CLR_LT_RED
-
-    SPRITE_TYPES(SPRITE_TYPE_EXTRA_LIFE).spriteType = SPRITE_TYPE_EXTRA_LIFE
-    SPRITE_TYPES(SPRITE_TYPE_EXTRA_LIFE).moveType = SPRITE_MOVE_NONE
-    SPRITE_TYPES(SPRITE_TYPE_EXTRA_LIFE).frames = ""
-    SPRITE_TYPES(SPRITE_TYPE_EXTRA_LIFE).maxFrame = 1
-    SPRITE_TYPES(SPRITE_TYPE_EXTRA_LIFE).frameRate = 0
-    SPRITE_TYPES(SPRITE_TYPE_EXTRA_LIFE).charCollision = CHAR_COLLISION_EXTRA_LIFE
-    SPRITE_TYPES(SPRITE_TYPE_EXTRA_LIFE).charColor = CLR_LT_CYAN
-END SUB
-
 
 '==========================================================================
 '                     GENERIC UTILITY FUNCTIONS
@@ -432,6 +449,8 @@ SUB DebugSprite (mySprite AS Sprite, terminate%)
     PRINT "frameRateTimer: " + STR$(mySprite.frameRateTimer)
     PRINT "charCollision: " + STR$(mySprite.charCollision)
     PRINT "charColor: " + STR$(mySprite.charColor)
+    PRINT "gravity: " + STR$(mySprite.gravity)
+    PRINT "gravityTimer: " + STR$(mySprite.gravityTimer)
     PRINT "row: " + STR$(mySprite.row)
     PRINT "col: " + STR$(mySprite.col)
     Pause
