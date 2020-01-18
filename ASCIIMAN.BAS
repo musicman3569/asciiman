@@ -1,10 +1,10 @@
 DEFINT A-Z
 
-' Global Constants
+'--- Global Constants
 DIM SHARED MAX_ROWS: MAX_ROWS = 28
 DIM SHARED MAX_COLS: MAX_COLS = 80
 
-' Color Palette Aliases
+'--- Color Palette Aliases
 DIM SHARED CLR_BLACK: CLR_BLACK = 0
 DIM SHARED CLR_BLUE: CLR_BLUE = 1
 DIM SHARED CLR_GREEN: CLR_GREEN = 2
@@ -22,19 +22,19 @@ DIM SHARED CLR_LT_MAGENTA: CLR_LT_MAGENTA = 13
 DIM SHARED CLR_YELLOW: CLR_YELLOW = 14
 DIM SHARED CLR_LT_WHITE: CLR_LT_WHITE = 15
 
-' Sprite Type Constants
+'--- Sprite Type Constants
 DIM SHARED SPRITE_TYPE_NONE: SPRITE_TYPE_NONE = 0
 DIM SHARED SPRITE_TYPE_PLAYER: SPRITE_TYPE_PLAYER = 1
 DIM SHARED SPRITE_TYPE_ENEMY1: SPRITE_TYPE_ENEMY1 = 2
 DIM SHARED SPRITE_TYPE_FIRE: SPRITE_TYPE_FIRE = 3
 DIM SHARED SPRITE_TYPE_EXTRA_LIFE: SPRITE_TYPE_EXTRA_LIFE = 4
 
-' Sprite Movement Type Constants
+'--- Sprite Movement Type Constants
 DIM SHARED SPRITE_MOVE_NONE: SPRITE_MOVE_NONE = 0
 DIM SHARED SPRITE_MOVE_PLAYER_CONTROLLED: SPRITE_MOVE_PLAYER_CONTROLLED = 1
 DIM SHARED SPRITE_MOVE_LR_RANDOM_GROUND: SPRITE_MOVE_LR_RANDOM_GROUND = 2
 
-' Character Collision Behavior Constants
+'--- Character Collision Behavior Constants
 DIM SHARED CHAR_COLLISION_NONE: CHAR_COLLISION_NONE = 0
 DIM SHARED CHAR_COLLISION_SOLID: CHAR_COLLISION_SOLID = 1
 DIM SHARED CHAR_COLLISION_DEATH: CHAR_COLLISION_DEATH = 2
@@ -44,6 +44,7 @@ DIM SHARED CHAR_COLLISION_NEXT_LEVEL: CHAR_COLLISION_NEXT_LEVEL = 5
 DIM SHARED CHAR_COLLISION_PUSH_LEFT: CHAR_COLLISION_PUSH_LEFT = 6
 DIM SHARED CHAR_COLLISION_PUSH_RIGHT: CHAR_COLLISION_PUSH_RIGHT = 7
 
+'--- Main data type for configuring all game sprites
 TYPE Sprite
     spriteType AS INTEGER
     moveType AS INTEGER
@@ -58,44 +59,23 @@ TYPE Sprite
     col AS INTEGER
 END TYPE
 
-DIM SHARED SPRITE_PLAYER AS Sprite
-SPRITE_PLAYER.spriteType = SPRITE_TYPE_PLAYER
-SPRITE_PLAYER.moveType = SPRITE_MOVE_PLAYER_CONTROLLED
-SPRITE_PLAYER.frames = ""
-SPRITE_PLAYER.maxFrame = 0
-SPRITE_PLAYER.frameRate = 0
-SPRITE_PLAYER.charCollision = CHAR_COLLISION_SOLID
-SPRITE_PLAYER.charColor = CLR_YELLOW
+'--------------------------------------------------------------------------
+' Array to store all active game sprites
+'--------------------------------------------------------------------------
+DIM SHARED SPRITES(200) AS Sprite
+DIM SHARED SPRITE_COUNT: SPRITE_COUNT = 0 '--- Number of active sprites.  Increment as they are added.
 
-DIM SHARED SPRITE_ENEMY1 AS Sprite
-SPRITE_ENEMY1.spriteType = SPRITE_TYPE_ENEMY1
-SPRITE_ENEMY1.moveType = SPRITE_MOVE_LR_RANDOM_GROUND
-SPRITE_ENEMY1.frames = "•¢"
-SPRITE_ENEMY1.maxFrame = 1
-SPRITE_ENEMY1.frameRate = 3
-SPRITE_ENEMY1.charCollision = CHAR_COLLISION_SOLID
-SPRITE_ENEMY1.charColor = CLR_GREEN
+'--------------------------------------------------------------------------
+' Array with 1 of each SPRITE_TYPE_{...} as the index.
+' Used as templates for making new sprites, and for getting the attributes
+' of each SPRITE_TYPE_{...}
+'--------------------------------------------------------------------------
+DIM SHARED SPRITE_TYPES(5) AS Sprite
+DIM SHARED SPRITE_TYPES_MAX: SPRITE_TYPES_MAX = 4 '--- Highest value of all the SPRINT_TYPE_{} constants
 
-DIM SHARED SPRITE_FIRE AS Sprite
-SPRITE_FIRE.spriteType = SPRITE_TYPE_FIRE
-SPRITE_FIRE.moveType = SPRITE_MOVE_NONE
-SPRITE_FIRE.frames = ",`'"
-SPRITE_FIRE.maxFrame = 2
-SPRITE_FIRE.frameRate = 1
-SPRITE_FIRE.charCollision = CHAR_COLLISION_SOLID
-SPRITE_FIRE.charColor = CLR_LT_RED
-
-DIM SHARED SPRITE_EXTRA_LIFE AS Sprite
-SPRITE_EXTRA_LIFE.spriteType = SPRITE_TYPE_EXTRA_LIFE
-SPRITE_EXTRA_LIFE.moveType = SPRITE_MOVE_NONE
-SPRITE_EXTRA_LIFE.frames = ""
-SPRITE_EXTRA_LIFE.maxFrame = 0
-SPRITE_EXTRA_LIFE.frameRate = 0
-SPRITE_EXTRA_LIFE.charCollision = CHAR_COLLISION_EXTRA_LIFE
-SPRITE_EXTRA_LIFE.charColor = CLR_LT_CYAN
-
-' Start Execution
+'--- Start Program Execution
 SetDisplayMode
+InitializeSpriteTypes
 StartGameLevel 1
 SYSTEM
 
@@ -107,6 +87,15 @@ SYSTEM
 SUB StartGameLevel (gameLevel)
     LoadLevelData gameLevel
     ParseLevelData
+
+    '--- TODO: Replace this with an actual game loop
+    FOR i = 1 TO 150
+        RenderSprites
+        PrintAt 29, 1, 15, "SPRITE_COUNT:" + STR$(SPRITE_COUNT)
+        _LIMIT 18
+    NEXT i
+
+    PrintAt 29, 1, 15, "Press any key to exit..."
     Pause
 END SUB
 
@@ -146,6 +135,7 @@ SUB DisplayLevelTitle (title$)
     PrintAt 10, 10, 15, title$
     SLEEP 3
     ClearInkey
+    CLS
 END SUB
 
 '--------------------------------------------------------------------------
@@ -161,43 +151,50 @@ SUB ParseLevelData
     groundTexture$(1) = "±"
     groundTexture$(2) = "²"
 
-
-    '--- TODO: This needs to be finished to handle creating sprites, etc.
     FOR row = 1 TO MAX_ROWS
         FOR col = 1 TO MAX_COLS
             char$ = CharAt$(row, col)
             SELECT CASE char$
-                CASE IS = "Û" ' Solid ground with random texture
+                CASE "Û" '--- Solid ground (random texture)
                     COLOR CLR_GRAY
                     char$ = groundTexture$(INT(RND * 3))
-                CASE IS = "±"
+                CASE "±"
                     COLOR CLR_CYAN
-                CASE IS = "²"
+                CASE "²"
                     COLOR CLR_LT_BLUE
-                CASE IS = "ß"
+                CASE "ß"
                     COLOR CLR_GRAY
-                CASE IS = "T"
-                    COLOR torch.color
-                    curr.char$ = ""
-                CASE IS = "P"
-                    COLOR pole.color
-                    curr.char$ = "³"
-                CASE IS = "S"
-                    COLOR ground2.color
-                    curr.char$ = "Û"
-                CASE IS = "\"
-                    COLOR slide.color
-                CASE IS = "/"
-                    COLOR slide.color
-                CASE IS = ""
-                    COLOR hero.color
-                CASE IS = "°"
-                    COLOR warp.color
-                CASE IS = "³"
-                    COLOR spike.color
+                CASE "", "T" '--- Torch
+                    COLOR CLR_YELLOW
+                    char$ = ""
+                CASE "P" '--- Pole   [P]
+                    COLOR CLR_YELLOW
+                    char$ = "³"
+                CASE "S" '--- Solid color ground (untextured)
+                    COLOR CLR_GRAY
+                    char$ = "Û"
+                CASE "\" '--- Slide (right)
+                    COLOR CLR_BROWN
+                CASE "/" '--- Slide (left)
+                    COLOR CLR_BROWN
+                CASE "" '--- Player
+                    COLOR CLR_YELLOW
+                CASE "°" '--- Level Exit
+                    COLOR CLR_LT_MAGENTA
+                CASE "³" '--- Spike Hazard
+                    COLOR CLR_LT_CYAN
+                CASE "O" '--- Enemy1 SPRITE
+                    char$ = "•"
+                CASE "F" '--- Fire SPRITE
+                    char$ = "'"
                 CASE ELSE
-                    COLOR ground.color
+                    COLOR CLR_GRAY
             END SELECT
+
+            LOCATE row, col: PRINT char$
+
+            spriteType = GetSpriteType(char$)
+            IF spriteType THEN AddSprite spriteType, row, col
         NEXT col
     NEXT row
 END SUB
@@ -224,10 +221,69 @@ FUNCTION GetCharCollision (char$)
         CASE "³"
             GetCharCollision = CHAR_COLLISION_DEATH
         CASE ELSE
-            '--- TODO: Check sprite collision here
-            GetCharCollision = CHAR_COLLISION_SOLID
+            spriteType = GetSpriteType(char$)
+            IF spriteType THEN
+                GetCharCollision = SPRITE_TYPES(spriteType).charCollision
+            ELSE
+                GetCharCollision = CHAR_COLLISION_SOLID
+            END IF
     END SELECT
 END FUNCTION
+
+'--------------------------------------------------------------------------
+' Renders all active sprites to the screen and updates their animation frames.
+'--------------------------------------------------------------------------
+SUB RenderSprites
+    DIM currSprite AS Sprite
+
+    FOR index = 0 TO SPRITE_COUNT - 1
+        currSprite = SPRITES(index)
+        currFrame = currSprite.frame
+
+        '--- Only render on-screen sprites.
+        IF currSprite.row > 0 AND currSprite.col > 0 THEN
+            PrintAt currSprite.row, currSprite.col, currSprite.charColor, MID$(currSprite.frames, currSprite.frame, 1)
+
+            '--- Only animate sprite if framerate is above 0
+            IF SPRITES(index).frameRate THEN
+                SPRITES(index).frameRateTimer = (SPRITES(index).frameRateTimer + 1) MOD SPRITES(index).frameRate
+
+                '--- Animate next frame when frameRateTimer cycles to 0
+                IF SPRITES(index).frameRateTimer = 0 THEN
+                    SPRITES(index).frame = SPRITES(index).frame + 1
+                    IF SPRITES(index).frame > SPRITES(index).maxFrame THEN SPRITES(index).frame = 1
+                END IF
+            END IF
+        END IF
+    NEXT index
+END SUB
+
+'--------------------------------------------------------------------------
+' Initializes a new sprit into the global SPRITES array and increments
+' the SPRITE_COUNT so all initialized Sprites can be tracked.
+'
+' @param spriteType% One of the SPRITE_TYPE_{...} constants to specify the type.
+' @param row% Row of the sprite's starting position.
+' @param col% Col of the sprite's starting position.
+'--------------------------------------------------------------------------
+SUB AddSprite (spriteType%, row%, col%)
+    DIM template AS Sprite
+    template = SPRITE_TYPES(spriteType%)
+
+    SPRITES(SPRITE_COUNT).spriteType = template.spriteType
+    SPRITES(SPRITE_COUNT).moveType = template.moveType
+    SPRITES(SPRITE_COUNT).frames = template.frames
+    SPRITES(SPRITE_COUNT).frame = INT(RND * template.maxFrame) + 1
+    SPRITES(SPRITE_COUNT).maxFrame = template.maxFrame
+    SPRITES(SPRITE_COUNT).frameRate = template.frameRate
+    SPRITES(SPRITE_COUNT).frameRateTimer = INT(RND * template.frameRate)
+    SPRITES(SPRITE_COUNT).charCollision = template.charCollision
+    SPRITES(SPRITE_COUNT).charColor = template.charColor
+    SPRITES(SPRITE_COUNT).row = row%
+    SPRITES(SPRITE_COUNT).col = col%
+
+    SPRITE_COUNT = SPRITE_COUNT + 1
+END SUB
 
 '--------------------------------------------------------------------------
 ' Returns the SPRITE_TYPE_{sprite_type} constant that specifies
@@ -237,8 +293,60 @@ END FUNCTION
 ' @return Returns one of the SPRITE_TYPE global constants.
 '--------------------------------------------------------------------------
 FUNCTION GetSpriteType (char$)
-    '--- TODO: Use the Sprite templates to check char by searching for char$ in the Sprite.frames
+    GetSpriteType = SPRITE_TYPE_NONE
+
+    '--- Search all characters in all the SpriteTypes animation frames
+    IF char$ <> " " THEN
+        FOR currSpriteType = 1 TO SPRITE_TYPES_MAX
+            IF INSTR(SPRITE_TYPES(currSpriteType).frames, char$) THEN
+                GetSpriteType = currSpriteType
+                EXIT FOR
+            END IF
+        NEXT currSpriteType
+    END IF
 END FUNCTION
+
+'--------------------------------------------------------------------------
+' Initializes the global SPRITE_TYPES() array with the Sprite templates
+' for each defined SPRITE_TYPE_{} constant.  Used for initializing sprites
+' with the correct starting values.
+'--------------------------------------------------------------------------
+SUB InitializeSpriteTypes
+    SPRITE_TYPES(SPRITE_TYPE_NONE).spriteType = SPRITE_TYPE_NONE
+
+    SPRITE_TYPES(SPRITE_TYPE_PLAYER).spriteType = SPRITE_TYPE_PLAYER
+    SPRITE_TYPES(SPRITE_TYPE_PLAYER).moveType = SPRITE_MOVE_PLAYER_CONTROLLED
+    SPRITE_TYPES(SPRITE_TYPE_PLAYER).frames = ""
+    SPRITE_TYPES(SPRITE_TYPE_PLAYER).maxFrame = 1
+    SPRITE_TYPES(SPRITE_TYPE_PLAYER).frameRate = 0
+    SPRITE_TYPES(SPRITE_TYPE_PLAYER).charCollision = CHAR_COLLISION_SOLID
+    SPRITE_TYPES(SPRITE_TYPE_PLAYER).charColor = CLR_YELLOW
+
+    SPRITE_TYPES(SPRITE_TYPE_ENEMY1).spriteType = SPRITE_TYPE_ENEMY1
+    SPRITE_TYPES(SPRITE_TYPE_ENEMY1).moveType = SPRITE_MOVE_LR_RANDOM_GROUND
+    SPRITE_TYPES(SPRITE_TYPE_ENEMY1).frames = "•¢"
+    SPRITE_TYPES(SPRITE_TYPE_ENEMY1).maxFrame = 2
+    SPRITE_TYPES(SPRITE_TYPE_ENEMY1).frameRate = 5
+    SPRITE_TYPES(SPRITE_TYPE_ENEMY1).charCollision = CHAR_COLLISION_DEATH
+    SPRITE_TYPES(SPRITE_TYPE_ENEMY1).charColor = CLR_GREEN
+
+    SPRITE_TYPES(SPRITE_TYPE_FIRE).spriteType = SPRITE_TYPE_FIRE
+    SPRITE_TYPES(SPRITE_TYPE_FIRE).moveType = SPRITE_MOVE_NONE
+    SPRITE_TYPES(SPRITE_TYPE_FIRE).frames = ".;'.;`"
+    SPRITE_TYPES(SPRITE_TYPE_FIRE).maxFrame = 6
+    SPRITE_TYPES(SPRITE_TYPE_FIRE).frameRate = 1
+    SPRITE_TYPES(SPRITE_TYPE_FIRE).charCollision = CHAR_COLLISION_SOLID
+    SPRITE_TYPES(SPRITE_TYPE_FIRE).charColor = CLR_LT_RED
+
+    SPRITE_TYPES(SPRITE_TYPE_EXTRA_LIFE).spriteType = SPRITE_TYPE_EXTRA_LIFE
+    SPRITE_TYPES(SPRITE_TYPE_EXTRA_LIFE).moveType = SPRITE_MOVE_NONE
+    SPRITE_TYPES(SPRITE_TYPE_EXTRA_LIFE).frames = ""
+    SPRITE_TYPES(SPRITE_TYPE_EXTRA_LIFE).maxFrame = 1
+    SPRITE_TYPES(SPRITE_TYPE_EXTRA_LIFE).frameRate = 0
+    SPRITE_TYPES(SPRITE_TYPE_EXTRA_LIFE).charCollision = CHAR_COLLISION_EXTRA_LIFE
+    SPRITE_TYPES(SPRITE_TYPE_EXTRA_LIFE).charColor = CLR_LT_CYAN
+END SUB
+
 
 '==========================================================================
 '                     GENERIC UTILITY FUNCTIONS
@@ -288,5 +396,44 @@ END SUB
 ' @param col% Screen col to read.
 '--------------------------------------------------------------------------
 FUNCTION CharAt$ (row, col)
-    ChartAt$ = CHR$(SCREEN(row, col))
+    CharAt$ = CHR$(SCREEN(row, col))
 END FUNCTION
+
+'--------------------------------------------------------------------------
+' Clears the screen, displays a message, and terminates the program.
+' Use when outputting debugging information when troubleshooting.
+'
+' @param msg$ Debugging output to display on-screen
+'--------------------------------------------------------------------------
+SUB Debug (msg$)
+    CLS
+    PrintAt 1, 1, 15, msg$
+    Pause
+    SYSTEM
+END SUB
+
+'--------------------------------------------------------------------------
+' Displays all the properties of a Sprite on-screen and pauses.
+' Useful when debugging Sprite values.
+'
+' @param mySprite Sprite data to display.
+' @param terminate% Set to 1 to end execution after debugging.
+'--------------------------------------------------------------------------
+SUB DebugSprite (mySprite AS Sprite, terminate%)
+    'CLS
+    LOCATE 1, 1
+    COLOR 7, 0
+    PRINT "spriteType: " + STR$(mySprite.spriteType)
+    PRINT "moveType: " + STR$(mySprite.moveType)
+    PRINT "frames: " + mySprite.frames
+    PRINT "frame: " + STR$(mySprite.frame)
+    PRINT "maxFrame: " + STR$(mySprite.maxFrame)
+    PRINT "frameRate: " + STR$(mySprite.frameRate)
+    PRINT "frameRateTimer: " + STR$(mySprite.frameRateTimer)
+    PRINT "charCollision: " + STR$(mySprite.charCollision)
+    PRINT "charColor: " + STR$(mySprite.charColor)
+    PRINT "row: " + STR$(mySprite.row)
+    PRINT "col: " + STR$(mySprite.col)
+    Pause
+    IF terminate% THEN SYSTEM
+END SUB
