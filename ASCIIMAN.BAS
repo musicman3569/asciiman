@@ -1,8 +1,28 @@
 DEFINT A-Z
 
-'--- Global Constants
-DIM SHARED MAX_ROWS: MAX_ROWS = 28 '--- Game play area height, leaves 2 rows for stats
-DIM SHARED MAX_COLS: MAX_COLS = 80 '--- Game play area width
+TYPE Coord
+    row AS INTEGER
+    col AS INTEGER
+END TYPE
+
+TYPE Rectangle
+    min AS Coord
+    max AS Coord
+END TYPE
+
+'--- Dimensions of the screen
+DIM SHARED SCREEN_AREA AS Rectangle
+SCREEN_AREA.min.row = 0
+SCREEN_AREA.min.col = 0
+SCREEN_AREA.max.row = 30
+SCREEN_AREA.max.col = 80
+
+'--- Dimensions of the game play area, leaves 2 rows for stats
+DIM SHARED GAME_AREA AS Rectangle
+GAME_AREA.min.row = 0
+GAME_AREA.min.col = 0
+GAME_AREA.max.row = 28
+GAME_AREA.max.col = 80
 
 '--- Color Palette Aliases
 DIM SHARED CLR_BLACK: CLR_BLACK = 0
@@ -48,11 +68,6 @@ DIM SHARED CHAR_COLLISION_NEXT_LEVEL: CHAR_COLLISION_NEXT_LEVEL = 5
 DIM SHARED CHAR_COLLISION_PUSH_LEFT: CHAR_COLLISION_PUSH_LEFT = 6
 DIM SHARED CHAR_COLLISION_PUSH_RIGHT: CHAR_COLLISION_PUSH_RIGHT = 7
 
-TYPE Coord
-    row AS INTEGER
-    col AS INTEGER
-END TYPE
-
 '--- Main data type for configuring all game sprites
 TYPE Sprite
     spriteType AS INTEGER '--- Use SPRITE_TYPE_{...} constant. Defines the type of sprite.
@@ -69,8 +84,10 @@ TYPE Sprite
     nextSpriteType AS INTEGER '--- Use SPRITE_TYPE_{...} constant. Changes the current sprite to this SPRITE_TYPES template. SPRITE_TYPE_NONE = no change.
     nextSpriteTypeTimer AS INTEGER '--- Number of frames to wait before changing the sprite to the value in nextSpriteType.
     lives AS INTEGER '--- Stores the health of number of lives remaining for a sprite.
-    row AS INTEGER '--- Row on the SCREEN to render sprite. Range 1 to MAX_ROWS, or 0 to disable sprite.
-    col AS INTEGER '--- Column on the SCREEN to render sprite. Range 1 to MAX_COLS, or 0 to disable sprite.
+    position AS Coord
+    velocity AS Coord
+    row AS INTEGER '--- Row on the SCREEN to render sprite. Range 1 to GAME_AREA.max.row, or 0 to disable sprite.
+    col AS INTEGER '--- Column on the SCREEN to render sprite. Range 1 to GAME_AREA.max.col, or 0 to disable sprite.
 END TYPE
 
 '--------------------------------------------------------------------------
@@ -197,7 +214,7 @@ SUB LoadLevelData (level)
     DisplayLevelTitle levelTitle$
 
     ' Read/render file data to the screen
-    FOR row = 1 TO MAX_ROWS
+    FOR row = 1 TO GAME_AREA.max.row
         INPUT #1, levelData$
         PrintAt row, 1, 7, levelData$
     NEXT row
@@ -233,8 +250,8 @@ SUB ParseLevelData
     groundTexture$(1) = "±"
     groundTexture$(2) = "²"
 
-    FOR row = 1 TO MAX_ROWS
-        FOR col = 1 TO MAX_COLS
+    FOR row = 1 TO GAME_AREA.max.row
+        FOR col = 1 TO GAME_AREA.max.col
             char$ = CharAt$(row, col)
             SELECT CASE char$
                 CASE "Û" '--- Solid ground (random texture)
@@ -338,7 +355,7 @@ SUB MoveSprites
         END IF
 
         '--- Move sprite after all movements have been calculated
-        MoveSpriteToward index, sprite.row + moveRows, sprite.col + moveCols
+        MoveSpriteToward index, sprite.position.row + moveRows, sprite.position.col + moveCols
     NEXT index
 END SUB
 
@@ -348,17 +365,17 @@ SUB MoveSpriteToward (spriteIndex, row, col)
     sprite = SPRITES(spriteIndex)
 
     '--- Get the distance (in character units) to the target row/col
-    rowStepsRemaining = sprite.row - row
-    colStepsRemaining = sprite.col - col
+    rowStepsRemaining = sprite.position.row - row
+    colStepsRemaining = sprite.position.col - col
     stepsRemaining = GetMax(ABS(rowStepsRemaining), ABS(colStepsRemaining))
 
     IF stepsRemaining > 0 THEN
         '--- Move one unit toward the target row/col in a straight line
-        newRow = sprite.row + CINT(rowStepsRemaining / stepsRemaining)
-        newCol = sprite.col + CINT(colStepsRemaining / stepsRemaining)
+        newRow = sprite.position.row + CINT(rowStepsRemaining / stepsRemaining)
+        newCol = sprite.position.col + CINT(colStepsRemaining / stepsRemaining)
 
         '--- Treat collisions with the screen boundaries as solid objects
-        IF newRow > MAX_ROWS OR newRow < 1 OR newCol > MAX_COLS OR newCol < 1 THEN
+        IF newRow > GAME_AREA.max.row OR newRow < 1 OR newCol > GAME_AREA.max.col OR newCol < 1 THEN
             collisionType = CHAR_COLLISION_SOLID
         ELSE
             HandleSpriteCollision spriteIndex, newRow, newCol
@@ -392,16 +409,16 @@ END SUB
 ' Renders all active sprites to the screen and updates their animation frames.
 '--------------------------------------------------------------------------
 SUB RenderSprites
-    DIM currSprite AS Sprite
+    DIM sprite AS Sprite
 
     FOR index = 0 TO SPRITE_COUNT - 1
-        currSprite = SPRITES(index)
-        currFrame = currSprite.frame
+        sprite = SPRITES(index)
+        currFrame = sprite.frame
 
         '--- Only render on-screen sprites.
-        IF currSprite.row > 0 AND currSprite.col > 0 THEN
-            SPRITES(index).charColor = AnimateSpriteColor(currSprite)
-            PrintAt currSprite.row, currSprite.col, currSprite.charColor, MID$(currSprite.frames, currSprite.frame, 1)
+        IF sprite.position.row > 0 AND sprite.position.col > 0 THEN
+            SPRITES(index).charColor = AnimateSpriteColor(sprite)
+            PrintAt sprite.position.row, sprite.position.col, sprite.charColor, MID$(sprite.frames, sprite.frame, 1)
 
             '--- Only animate sprite if framerate is above 0
             IF SPRITES(index).frameRate THEN
@@ -457,8 +474,8 @@ SUB AddSprite (spriteType%, row%, col%)
     SPRITES(SPRITE_COUNT).frameRateTimer = INT(RND * template.frameRate)
 
     '--- Set the sprite position
-    SPRITES(SPRITE_COUNT).row = row%
-    SPRITES(SPRITE_COUNT).col = col%
+    SPRITES(SPRITE_COUNT).position.row = row%
+    SPRITES(SPRITE_COUNT).position.col = col%
 
     '--- Register the SPRITES() index value of player sprites so we know which ones they are.
     IF spriteType% = SPRITE_TYPE_PLAYER THEN
@@ -482,12 +499,12 @@ FUNCTION GetSpriteType (char$)
 
     '--- Search all characters in all the SpriteTypes animation frames
     IF char$ <> " " THEN
-        FOR currSpriteType = 1 TO SPRITE_TYPES_MAX
-            IF INSTR(SPRITE_TYPES(currSpriteType).frames, char$) THEN
-                GetSpriteType = currSpriteType
+        FOR spriteType = 1 TO SPRITE_TYPES_MAX
+            IF INSTR(SPRITE_TYPES(spriteType).frames, char$) THEN
+                GetSpriteType = spriteType
                 EXIT FOR
             END IF
-        NEXT currSpriteType
+        NEXT spriteType
     END IF
 END FUNCTION
 
@@ -568,26 +585,29 @@ END SUB
 ' Displays all the properties of a Sprite on-screen and pauses.
 ' Useful when debugging Sprite values.
 '
-' @param mySprite Sprite data to display.
+' @param sprite Sprite data to display.
 ' @param terminate% Set to 1 to end execution after debugging.
 '--------------------------------------------------------------------------
-SUB DebugSprite (mySprite AS Sprite, terminate%)
+SUB DebugSprite (sprite AS Sprite, terminate%)
     'CLS
     LOCATE 1, 1
     COLOR 7, 0
-    PRINT "spriteType: " + STR$(mySprite.spriteType)
-    PRINT "moveType: " + STR$(mySprite.moveType)
-    PRINT "frames: " + mySprite.frames
-    PRINT "frame: " + STR$(mySprite.frame)
-    PRINT "maxFrame: " + STR$(mySprite.maxFrame)
-    PRINT "frameRate: " + STR$(mySprite.frameRate)
-    PRINT "frameRateTimer: " + STR$(mySprite.frameRateTimer)
-    PRINT "charCollision: " + STR$(mySprite.charCollision)
-    PRINT "charColor: " + STR$(mySprite.charColor)
-    PRINT "gravity: " + STR$(mySprite.gravity)
-    PRINT "gravityTimer: " + STR$(mySprite.gravityTimer)
-    PRINT "row: " + STR$(mySprite.row)
-    PRINT "col: " + STR$(mySprite.col)
+    PRINT "spriteType: " + STR$(sprite.spriteType)
+    PRINT "moveType: " + STR$(sprite.moveType)
+    PRINT "frames: " + sprite.frames
+    PRINT "frame: " + STR$(sprite.frame)
+    PRINT "maxFrame: " + STR$(sprite.maxFrame)
+    PRINT "frameRate: " + STR$(sprite.frameRate)
+    PRINT "frameRateTimer: " + STR$(sprite.frameRateTimer)
+    PRINT "charCollision: " + STR$(sprite.charCollision)
+    PRINT "charColor: " + STR$(sprite.charColor)
+    PRINT "gravity: " + STR$(sprite.gravity)
+    PRINT "gravityTimer: " + STR$(sprite.gravityTimer)
+    PRINT "position.row: " + STR$(sprite.position.row)
+    PRINT "position.col: " + STR$(sprite.position.col)
+    PRINT "velocity.row: " + STR$(sprite.velocity.row)
+    PRINT "velocity.col: " + STR$(sprite.velocity.col)
+
     Pause
     IF terminate% THEN SYSTEM
 END SUB
