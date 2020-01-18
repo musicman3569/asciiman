@@ -264,7 +264,7 @@ FOR level = start.place TO levels
                     new.enemy.col = enemy.col(o) + INT(RND * 3) - 1
                     new.enemy.char$ = CHR$(SCREEN(enemy.row(o), new.enemy.col))
                     new.enemy.charbelow$ = CHR$(SCREEN(enemy.row(o) + 1, new.enemy.col))
-                    IF new.enemy.char$ = " " AND CharIsGround(new.enemy.charbelow$) THEN
+                    IF (new.enemy.char$ = " " OR new.enemy.char$ = hero$) AND CharIsGround(new.enemy.charbelow$) THEN
                         LOCATE enemy.row(o), enemy.col(o): PRINT " ";
                         enemy.col(o) = new.enemy.col
                     END IF
