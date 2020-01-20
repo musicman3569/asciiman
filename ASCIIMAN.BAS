@@ -21,14 +21,16 @@ TYPE GameState
     nextLevel AS INTEGER '--- Game level to load. Increments as levels are completed.
     levelTitle AS STRING '--- Title of the currently loaded level.
     gravity AS INTEGER '--- Global gravity direction to combine with Sprite gravity settings.
+    frameRate AS INTEGER '--- Framerate the game loop runs at in frames-per-second.
 END TYPE
 
 '--- Initialize global game state
 DIM SHARED GAME_STATE AS GameState
 GAME_STATE.soundEnabled = 1
 GAME_STATE.loadedLevel = 0
-GAME_STATE.nextLevel = 2
+GAME_STATE.nextLevel = 1
 GAME_STATE.gravity = 1
+GAME_STATE.frameRate = 18
 
 '--------------------------------------------------------------------------
 ' Debugging variables for tracking information, changing values has no functional impact.
@@ -147,6 +149,7 @@ TYPE Sprite
     position AS Coord '--- Row/col position in the GAME_AREA Rectangle bounds to render sprite. Set row or col to 0 to disable sprite.
     velocity AS Coord '--- Number of chars to move the row/col of the sprite during the next frame.
     moveTo AS Coord '--- Used internally as the sprite is being moved and velocity is being applied. Do not modify directly.
+    moveTimer AS INTEGER '--- Number of game frames to disallow automatic or player controlled movement.
 END TYPE
 
 DIM SHARED SPRITES(200) AS Sprite '--- Array to store all active game sprites
@@ -391,7 +394,7 @@ SUB StartNextLevel
     WHILE GAME_STATE.nextLevel = GAME_STATE.loadedLevel
         RenderSprites
         PrintAt 29, 1, 15, "LIVES:" + STR$(SPRITES(PLAYER(PLAYER_MAX).spriteIndex).lives) + " nextLevel:" + STR$(GAME_STATE.nextLevel) + " loadedLevel:" + STR$(GAME_STATE.loadedLevel) + " frameCount:" + STR$(frameCount)
-        _LIMIT 18
+        _LIMIT GAME_STATE.frameRate
         MoveSprites
         frameCount = frameCount + 1
     WEND
@@ -535,7 +538,7 @@ SUB MoveSprites
             '--- Apply automatic or player-controlled SPRITE_MOVE_{...} types
             SELECT CASE SPRITES(index).moveType
                 CASE SPRITE_MOVE_LR_RANDOM_GROUND
-                    SPRITES(index).velocity.col = INT(RND * 3) - 1
+                    SpriteMoveLRRandomGround index
                 CASE SPRITE_MOVE_PLAYER_CONTROLLED
                     SpriteMovePlayerControlled index
             END SELECT
@@ -553,6 +556,41 @@ SUB MoveSprites
             END IF
         END IF
     NEXT index
+END SUB
+
+'--------------------------------------------------------------------------
+' Apply automatic AI left/right velocity changes to a Sprite.  Avoids
+' falling off ledges or moving into hazards, and otherwise moves in slow,
+' random side-to-side increments. Used for Sprites having a moveType
+' value of SPRITE_MOVE_LR_RANDOM_GROUND.
+'
+' @param index Sprite index to move.
+'--------------------------------------------------------------------------
+SUB SpriteMoveLRRandomGround (index)
+    '--- Apply friction to existing movement
+    onSolid = GetCollisionType(index, NULL_INDEX, CharAt$(SPRITES(index).position.row + 1, SPRITES(index).position.col))
+    IF ABS(SPRITES(index).velocity.col) > 0 AND onSolid THEN
+        SPRITES(index).velocity.col = SPRITES(index).velocity.col - SGN(SPRITES(index).velocity.col)
+    END IF
+
+    IF SPRITES(index).moveTimer < 1 THEN
+        '--- Only move once every 1 to 20 game frames
+        SPRITES(index).moveTimer = INT(RND * 20) + 1
+        '--- Move randomly 1 left, 1 right, or stay put (1/3 chance of each)
+        SPRITES(index).velocity.col = INT(RND * 3) - 1
+
+        '--- Check for solid ground just below where the sprite should move.
+        rowBelow = SPRITES(index).position.row + 1
+        colBelow = SPRITES(index).position.col + SGN(SPRITES(index).velocity.col)
+
+        '--- If it's not solid ground, cancel moving there
+        collision = GetCollisionType(index, GetSpriteIndexAt(rowBelow, colBelow), CharAt$(rowBelow, colBelow))
+        IF collision <> CHAR_COLLISION_SOLID AND collision <> CHAR_COLLISION_ENEMY_DEATH THEN
+            SPRITES(index).velocity.col = 0
+        END IF
+    ELSE
+        SPRITES(index).moveTimer = SPRITES(index).moveTimer - 1
+    END IF
 END SUB
 
 '--------------------------------------------------------------------------
@@ -840,9 +878,10 @@ SUB SpriteDeath (spriteIndex)
             SPRITES(spriteIndex).lives = sprite.lives
             SPRITES(spriteIndex).frame = 1
             IF GAME_STATE.soundEnabled THEN SOUND 57, 10
+            IF SPRITES(spriteIndex).lives < 1 THEN GAME_STATE.nextLevel = 0
         CASE SPRITE_TYPE_ENEMY1
             '--- Show a red splat for dead Enemy1 sprites
-            replacementColor = CLR_LT_RED
+            replacementColor = CLR_GREEN
             replacementChar$ = "_"
     END SELECT
 
@@ -1097,6 +1136,9 @@ SUB DebugSprite (sprite AS Sprite)
         PRINT "position.col: " + STR$(sprite.position.col)
         PRINT "velocity.row: " + STR$(sprite.velocity.row)
         PRINT "velocity.col: " + STR$(sprite.velocity.col)
+        PRINT "moveTo.row: " + STR$(sprite.moveTo.row)
+        PRINT "moveTo.col: " + STR$(sprite.moveTo.col)
+        PRINT "moveTimer: " + STR$(sprite.moveTimer)
         PRINT "lives: " + STR$(sprite.lives)
         Pause
         SYSTEM
