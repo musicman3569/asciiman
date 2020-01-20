@@ -27,12 +27,15 @@ END TYPE
 DIM SHARED GAME_STATE AS GameState
 GAME_STATE.soundEnabled = 1
 GAME_STATE.loadedLevel = 0
-GAME_STATE.nextLevel = 1
+GAME_STATE.nextLevel = 2
 GAME_STATE.gravity = 1
 
-DIM SHARED DEBUG_ON: DEBUG_ON = 1
-DIM SHARED DEBUG_SPRITE_INDEX: DEBUG_SPRITE_INDEX = NULL_INDEX
-DIM SHARED DEBUG_CALLER AS STRING: DEBUG_CALLER = "NONE"
+'--------------------------------------------------------------------------
+' Debugging variables for tracking information, changing values has no functional impact.
+'--------------------------------------------------------------------------
+DIM SHARED DEBUG_ON: DEBUG_ON = 1 '--- 1 = Display messages from as Debug...() SUBs, 0 = Hide messages
+DIM SHARED DEBUG_SPRITE_INDEX: DEBUG_SPRITE_INDEX = NULL_INDEX '--- For tracking sprite index values
+DIM SHARED DEBUG_CALLER AS STRING: DEBUG_CALLER = "NONE" '--- For tracking calling SUBs (stack tracing)
 
 '--------------------------------------------------------------------------
 ' Dimensions of the screen
@@ -135,7 +138,6 @@ TYPE Sprite
     maxFrame AS INTEGER '--- Length of the frames property
     frameRate AS INTEGER '--- Number of game frames between Sprite animation frames.
     frameRateTimer AS INTEGER '--- Tracks frames between Sprite animations. Decrements from frameRate to 0.
-    charCollision AS INTEGER '--- Use CHAR_COLLISION_{...} constant. Defines sprite collision behavior.
     charColor AS INTEGER '--- Use CLR_{...} constant.  Defines sprite color.
     gravity AS INTEGER '--- 1 = sprite affected by gravity, 0 = sprite not affected by gravity, -1 = sprite floats up
     gravityTimer AS INTEGER '--- Number of game frames to suspend gravity effects.
@@ -164,7 +166,6 @@ SPRITE_TYPES(SPRITE_TYPE_PLAYER).moveType = SPRITE_MOVE_PLAYER_CONTROLLED
 SPRITE_TYPES(SPRITE_TYPE_PLAYER).frames = ""
 SPRITE_TYPES(SPRITE_TYPE_PLAYER).maxFrame = 1
 SPRITE_TYPES(SPRITE_TYPE_PLAYER).frameRate = 0
-SPRITE_TYPES(SPRITE_TYPE_PLAYER).charCollision = CHAR_COLLISION_SOLID
 SPRITE_TYPES(SPRITE_TYPE_PLAYER).charColor = CLR_YELLOW
 SPRITE_TYPES(SPRITE_TYPE_PLAYER).gravity = 1
 SPRITE_TYPES(SPRITE_TYPE_PLAYER).gravityTimer = 0
@@ -175,7 +176,6 @@ SPRITE_TYPES(SPRITE_TYPE_PLAYER_SPIKEBALL).moveType = SPRITE_MOVE_NONE
 SPRITE_TYPES(SPRITE_TYPE_PLAYER_SPIKEBALL).frames = ""
 SPRITE_TYPES(SPRITE_TYPE_PLAYER_SPIKEBALL).maxFrame = 1
 SPRITE_TYPES(SPRITE_TYPE_PLAYER_SPIKEBALL).frameRate = 0
-SPRITE_TYPES(SPRITE_TYPE_PLAYER_SPIKEBALL).charCollision = CHAR_COLLISION_SOLID
 SPRITE_TYPES(SPRITE_TYPE_PLAYER_SPIKEBALL).charColor = CLR_LT_WHITE
 SPRITE_TYPES(SPRITE_TYPE_PLAYER_SPIKEBALL).gravity = 1
 SPRITE_TYPES(SPRITE_TYPE_PLAYER_SPIKEBALL).gravityTimer = 0
@@ -349,6 +349,7 @@ COLLISIONS(SPRITE_TYPE_SPIKE, SPRITE_TYPE_NEXT_LEVEL) = CHAR_COLLISION_DEATH
 '--------------------------------------------------------------------------
 KEY(1) ON
 ON KEY(1) ToggleGravity
+
 KEY(10) ON
 ON KEY(10) ExitGame
 
@@ -515,12 +516,6 @@ SUB MoveSprites
     FOR index = 0 TO SPRITE_COUNT - 1
         '--- Only move sprite if it is alive and in a valid game area position
         IF SpriteIsActive(SPRITES(index)) THEN
-            '--- Calculate SPRITE_MOVE_{...} types that have automatic movement
-            SELECT CASE SPRITES(index).moveType
-                CASE SPRITE_MOVE_LR_RANDOM_GROUND
-                    SPRITES(index).velocity.col = INT(RND * 3) - 1
-            END SELECT
-
             '--- Apply gravity based on sprite settings
             IF SPRITES(index).gravityTimer = 0 THEN
                 IF SPRITES(index).gravity THEN
@@ -531,24 +526,63 @@ SUB MoveSprites
                     ELSEIF GAME_STATE.gravity < 0 THEN
                         SPRITES(index).velocity.row = GetMax(SPRITES(index).velocity.row + totalGravity, totalGravity)
                     END IF
-
                 END IF
             ELSE
+                SPRITES(index).velocity.row = 0
                 SPRITES(index).gravityTimer = SPRITES(index).gravityTimer - 1
             END IF
 
-            '--- Apply velocity after all other movements have been calculated
+            '--- Apply automatic or player-controlled SPRITE_MOVE_{...} types
+            SELECT CASE SPRITES(index).moveType
+                CASE SPRITE_MOVE_LR_RANDOM_GROUND
+                    SPRITES(index).velocity.col = INT(RND * 3) - 1
+                CASE SPRITE_MOVE_PLAYER_CONTROLLED
+                    SpriteMovePlayerControlled index
+            END SELECT
+
+            '--- Store original position so we can tell if the Sprite moved
             originalRow = SPRITES(index).position.row
             originalCol = SPRITES(index).position.col
 
+            '--- Move the Sprite using the new velocity values
             SpriteChangeMoveTarget index, originalRow + SPRITES(index).velocity.row, originalCol + SPRITES(index).velocity.col
 
-            '--- If sprite moved clear the spot it was in
+            '--- If the sprite moved clear the spot it was in
             IF originalRow <> SPRITES(index).position.row OR originalCol <> SPRITES(index).position.col THEN
                 IF SpriteIsActive(SPRITES(index)) THEN PrintAt originalRow, originalCol, 0, " "
             END IF
         END IF
     NEXT index
+END SUB
+
+'--------------------------------------------------------------------------
+' Handle keyboard input from the player and apply actions to player
+' controlled Sprites.
+'
+' @param spriteIndex SPRITES() array index of the player-controlled Sprite.
+'--------------------------------------------------------------------------
+SUB SpriteMovePlayerControlled (spriteIndex)
+    SELECT CASE UCASE$(INKEY$)
+        CASE CHR$(27) '--- Escape
+            GAME_STATE.nextLevel = 0
+        CASE CHR$(0) + "M" '--- Right
+            SPRITES(spriteIndex).velocity.col = 1
+        CASE CHR$(0) + "K" '--- Left
+            SPRITES(spriteIndex).velocity.col = -1
+        CASE " " '--- Jump
+            SPRITES(spriteIndex).velocity.row = SPRITES(index).gravity * GAME_STATE.gravity * -1
+            SPRITES(spriteIndex).gravityTimer = 16
+        CASE IS = "S" '--- Toggle Sound
+            IF GAME_STATE.soundEnabled = 0 THEN GAME_STATE.soundEnabled = 1 ELSE GAME_STATE.soundEnabled = 0
+        CASE IS = "B" '--- Spikeball attach
+            SPRITES(spriteIndex).nextSpriteType = SPRITE_TYPE_PLAYER_SPIKEBALL
+            SPRITES(spriteIndex).nextSpriteTypeTimer = 0
+            SPRITES(spriteIndex).velocity.col = 0
+        CASE ELSE
+            SPRITES(spriteIndex).velocity.col = 0
+    END SELECT
+
+    ClearInkey
 END SUB
 
 '--------------------------------------------------------------------------
@@ -780,25 +814,34 @@ END SUB
 ' @param spriteIndex Index of the Sprite that should lose a life.
 '--------------------------------------------------------------------------
 SUB SpriteDeath (spriteIndex)
-    DIM sprite AS Sprite
-    sprite = SPRITES(spriteIndex)
+    SPRITES(spriteIndex).lives = SPRITES(spriteIndex).lives - 1
+    DIM sprite AS Sprite: sprite = SPRITES(spriteIndex)
+
     replacementChar$ = " " '--- Default replacement char (empty space)
     replacementColor = CLR_BLACK '--- Default replacement color
 
     SELECT CASE sprite.spriteType
         CASE SPRITE_TYPE_PLAYER, SPRITE_TYPE_PLAYER_SPIKEBALL, SPRITE_TYPE_PLAYER_DRAINED
-            FOR playerIndex = 1 TO PLAYER_MAX
+            '--- Reset player sprite to default player template values
+            SPRITES(spriteIndex) = SPRITE_TYPES(SPRITE_TYPE_PLAYER)
+
+            '--- Move the Sprite back to the player's original starting position
+            FOR playerIndex = 0 TO PLAYER_MAX
                 IF PLAYER(playerIndex).spriteIndex = spriteIndex THEN
                     SPRITES(spriteIndex).position.row = PLAYER(playerIndex).startRow
                     SPRITES(spriteIndex).position.col = PLAYER(playerIndex).startCol
+                    SPRITES(spriteIndex).moveTo.row = PLAYER(playerIndex).startRow
+                    SPRITES(spriteIndex).moveTo.col = PLAYER(playerIndex).startCol
+                    EXIT FOR
                 END IF
             NEXT playerIndex
 
-            SPRITES(spriteIndex) = SPRITE_TYPES(sprite.spriteType)
-            SPRITES(spriteIndex).lives = sprite.lives - 1
+            '--- Replace the template's .lives value with the deducted value
+            SPRITES(spriteIndex).lives = sprite.lives
+            SPRITES(spriteIndex).frame = 1
             IF GAME_STATE.soundEnabled THEN SOUND 57, 10
         CASE SPRITE_TYPE_ENEMY1
-            SPRITES(spriteIndex).lives = 0
+            '--- Show a red splat for dead Enemy1 sprites
             replacementColor = CLR_LT_RED
             replacementChar$ = "_"
     END SELECT
@@ -834,13 +877,9 @@ SUB RenderSprites
 
     FOR index = 0 TO SPRITE_COUNT - 1
         sprite = SPRITES(index)
-        currFrame = sprite.frame
 
         '--- Only render on-screen sprites.
         IF SpriteIsActive(sprite) THEN
-            SPRITES(index).charColor = AnimateSpriteColor(sprite)
-            SpriteRender sprite
-
             '--- Only animate sprite if framerate is above 0
             IF SPRITES(index).frameRate THEN
                 SPRITES(index).frameRateTimer = (SPRITES(index).frameRateTimer + 1) MOD SPRITES(index).frameRate
@@ -851,8 +890,21 @@ SUB RenderSprites
                     IF SPRITES(index).frame > SPRITES(index).maxFrame THEN SPRITES(index).frame = 1
                 END IF
             END IF
+
+            SPRITES(index).charColor = AnimateSpriteColor(sprite)
+            RenderSprite sprite
         END IF
     NEXT index
+END SUB
+
+'--------------------------------------------------------------------------
+' Draws a Sprite on the screen at its stored position using the Sprite's
+' current animation frame and color.
+'
+' @param sprite Sprite to be rendered on the screen.
+'--------------------------------------------------------------------------
+SUB RenderSprite (sprite AS Sprite)
+    PrintAt sprite.position.row, sprite.position.col, sprite.charColor, MID$(sprite.frames, sprite.frame, 1)
 END SUB
 
 '--------------------------------------------------------------------------
@@ -868,10 +920,6 @@ FUNCTION SpriteIsActive (sprite AS Sprite)
         SpriteIsActive = 0
     END IF
 END FUNCTION
-
-SUB SpriteRender (sprite AS Sprite)
-    PrintAt sprite.position.row, sprite.position.col, sprite.charColor, MID$(sprite.frames, sprite.frame, 1)
-END SUB
 
 '--------------------------------------------------------------------------
 ' Returns the next charColor property value for a Sprite to be rendered
@@ -895,7 +943,7 @@ FUNCTION AnimateSpriteColor (sprite AS Sprite)
 END FUNCTION
 
 '--------------------------------------------------------------------------
-' Initializes a new sprit into the global SPRITES array and increments
+' Initializes a new sprite into the global SPRITES array and increments
 ' the SPRITE_COUNT so all initialized Sprites can be tracked.
 '
 ' @param spriteType% One of the SPRITE_TYPE_{...} constants to specify the type.
@@ -951,6 +999,7 @@ FUNCTION GetSpriteType (char$)
         NEXT spriteType
     END IF
 END FUNCTION
+
 
 '==========================================================================
 '                     GENERIC UTILITY FUNCTIONS
@@ -1018,11 +1067,9 @@ END FUNCTION
 '
 ' @param msg$ Debugging output to display on-screen
 '--------------------------------------------------------------------------
-SUB Debug (msg$, terminate, doPause)
+SUB Debug (msg$)
     IF DEBUG_ON THEN
-        PrintAt 30, 1, 15, "idx:" + STR$(DEBUG_SPRITE_INDEX) + " " + msg$
-        IF doPause THEN Pause
-        IF terminate THEN SYSTEM
+        PrintAt 30, 1, 10, msg$
     END IF
 END SUB
 
@@ -1031,11 +1078,9 @@ END SUB
 ' Useful when debugging Sprite values.
 '
 ' @param sprite Sprite data to display.
-' @param terminate% Set to 1 to end execution after debugging.
 '--------------------------------------------------------------------------
-SUB DebugSprite (sprite AS Sprite, terminate%)
+SUB DebugSprite (sprite AS Sprite)
     IF DEBUG_ON THEN
-        'CLS
         LOCATE 1, 1
         COLOR 7, 0
         PRINT "spriteType: " + STR$(sprite.spriteType)
@@ -1045,7 +1090,6 @@ SUB DebugSprite (sprite AS Sprite, terminate%)
         PRINT "maxFrame: " + STR$(sprite.maxFrame)
         PRINT "frameRate: " + STR$(sprite.frameRate)
         PRINT "frameRateTimer: " + STR$(sprite.frameRateTimer)
-        PRINT "charCollision: " + STR$(sprite.charCollision)
         PRINT "charColor: " + STR$(sprite.charColor)
         PRINT "gravity: " + STR$(sprite.gravity)
         PRINT "gravityTimer: " + STR$(sprite.gravityTimer)
@@ -1053,9 +1097,9 @@ SUB DebugSprite (sprite AS Sprite, terminate%)
         PRINT "position.col: " + STR$(sprite.position.col)
         PRINT "velocity.row: " + STR$(sprite.velocity.row)
         PRINT "velocity.col: " + STR$(sprite.velocity.col)
-
+        PRINT "lives: " + STR$(sprite.lives)
         Pause
-        IF terminate% THEN SYSTEM
+        SYSTEM
     END IF
 END SUB
 
@@ -1083,4 +1127,3 @@ SUB DebugSpriteCoords (spriteIndex, msg$)
         PRINT " ";
     END IF
 END SUB
-
