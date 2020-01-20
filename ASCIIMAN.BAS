@@ -150,6 +150,7 @@ TYPE Sprite
     velocity AS Coord '--- Number of chars to move the row/col of the sprite during the next frame.
     moveTo AS Coord '--- Used internally as the sprite is being moved and velocity is being applied. Do not modify directly.
     moveTimer AS INTEGER '--- Number of game frames to disallow automatic or player controlled movement.
+    friction AS INTEGER '--- Amount of velocity reduction to apply each frame when on a solid. Defaults to 1.
 END TYPE
 
 DIM SHARED SPRITES(200) AS Sprite '--- Array to store all active game sprites
@@ -161,6 +162,13 @@ DIM SHARED SPRITE_COUNT: SPRITE_COUNT = 0 '--- Number of active sprites.  Increm
 ' of each SPRITE_TYPE_{...}
 '--------------------------------------------------------------------------
 DIM SHARED SPRITE_TYPES(SPRITE_TYPES_MAX + 1) AS Sprite
+
+'--- Apply default settings to all SPRITE_TYPES, can be overridden below.
+FOR spriteType = 0 TO SPRITE_TYPES_MAX
+    SPRITE_TYPES(spriteType).friction = 1
+    SPRITE_TYPES(spriteType).frame = 1
+NEXT spriteType
+
 '--- Null Sprite template
 SPRITE_TYPES(SPRITE_TYPE_NONE).spriteType = SPRITE_TYPE_NONE
 '--- Player Sprite template
@@ -519,21 +527,7 @@ SUB MoveSprites
     FOR index = 0 TO SPRITE_COUNT - 1
         '--- Only move sprite if it is alive and in a valid game area position
         IF SpriteIsActive(SPRITES(index)) THEN
-            '--- Apply gravity based on sprite settings
-            IF SPRITES(index).gravityTimer = 0 THEN
-                IF SPRITES(index).gravity THEN
-                    totalGravity = SPRITES(index).gravity * GAME_STATE.gravity
-
-                    IF GAME_STATE.gravity > 0 THEN
-                        SPRITES(index).velocity.row = GetMin(SPRITES(index).velocity.row + totalGravity, totalGravity)
-                    ELSEIF GAME_STATE.gravity < 0 THEN
-                        SPRITES(index).velocity.row = GetMax(SPRITES(index).velocity.row + totalGravity, totalGravity)
-                    END IF
-                END IF
-            ELSE
-                SPRITES(index).velocity.row = 0
-                SPRITES(index).gravityTimer = SPRITES(index).gravityTimer - 1
-            END IF
+            SpriteApplyGravity index
 
             '--- Apply automatic or player-controlled SPRITE_MOVE_{...} types
             SELECT CASE SPRITES(index).moveType
@@ -559,6 +553,50 @@ SUB MoveSprites
 END SUB
 
 '--------------------------------------------------------------------------
+' Applies gravity to a Sprite based on the game state gravity and the
+' Sprite's gravity combined.
+'
+' @param index Sprite index to apply gravity to.
+'--------------------------------------------------------------------------
+SUB SpriteApplyGravity (index)
+    '--- Apply gravity based on sprite settings
+    IF SPRITES(index).gravityTimer = 0 THEN
+        IF SPRITES(index).gravity THEN
+            SpriteApplyFriction (index)
+            totalGravity = SPRITES(index).gravity * GAME_STATE.gravity
+
+            IF GAME_STATE.gravity > 0 THEN
+                SPRITES(index).velocity.row = GetMin(SPRITES(index).velocity.row + totalGravity, totalGravity)
+            ELSEIF GAME_STATE.gravity < 0 THEN
+                SPRITES(index).velocity.row = GetMax(SPRITES(index).velocity.row + totalGravity, totalGravity)
+            END IF
+        END IF
+    ELSE
+        SPRITES(index).velocity.row = 0
+        SPRITES(index).gravityTimer = SPRITES(index).gravityTimer - 1
+    END IF
+END SUB
+
+'--------------------------------------------------------------------------
+' Applies friction to a Sprite based on the Sprite's friction, and only
+' if it has gravity and is on a solid.
+'
+' @param index Sprite index to apply friction to.
+'--------------------------------------------------------------------------
+SUB SpriteApplyFriction (index)
+    IF SPRITES(index).friction THEN
+        rowBelow = SPRITES(index).position.row + SGN(GAME_STATE.gravity)
+
+        IF rowBelow >= GAME_AREA.min.row AND rowBelow <= GAME_AREA.max.col THEN
+            onSolid = GetCollisionType(index, NULL_INDEX, CharAt$(rowBelow, SPRITES(index).position.col))
+            IF ABS(SPRITES(index).velocity.col) > 0 AND onSolid THEN
+                SPRITES(index).velocity.col = SPRITES(index).velocity.col - SPRITES(index).friction * SGN(SPRITES(index).velocity.col)
+            END IF
+        END IF
+    END IF
+END SUB
+
+'--------------------------------------------------------------------------
 ' Apply automatic AI left/right velocity changes to a Sprite.  Avoids
 ' falling off ledges or moving into hazards, and otherwise moves in slow,
 ' random side-to-side increments. Used for Sprites having a moveType
@@ -567,12 +605,6 @@ END SUB
 ' @param index Sprite index to move.
 '--------------------------------------------------------------------------
 SUB SpriteMoveLRRandomGround (index)
-    '--- Apply friction to existing movement
-    onSolid = GetCollisionType(index, NULL_INDEX, CharAt$(SPRITES(index).position.row + 1, SPRITES(index).position.col))
-    IF ABS(SPRITES(index).velocity.col) > 0 AND onSolid THEN
-        SPRITES(index).velocity.col = SPRITES(index).velocity.col - SGN(SPRITES(index).velocity.col)
-    END IF
-
     IF SPRITES(index).moveTimer < 1 THEN
         '--- Only move once every 1 to 20 game frames
         SPRITES(index).moveTimer = INT(RND * 20) + 1
@@ -876,7 +908,6 @@ SUB SpriteDeath (spriteIndex)
 
             '--- Replace the template's .lives value with the deducted value
             SPRITES(spriteIndex).lives = sprite.lives
-            SPRITES(spriteIndex).frame = 1
             IF GAME_STATE.soundEnabled THEN SOUND 57, 10
             IF SPRITES(spriteIndex).lives < 1 THEN GAME_STATE.nextLevel = 0
         CASE SPRITE_TYPE_ENEMY1
