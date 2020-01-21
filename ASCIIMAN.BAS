@@ -10,6 +10,7 @@ TYPE Rectangle
     max AS Coord
 END TYPE
 
+'--- Useful when array searching to indicate no index was found.
 DIM SHARED NULL_INDEX: NULL_INDEX = -1
 
 '--------------------------------------------------------------------------
@@ -81,13 +82,35 @@ DIM SHARED CLR_LT_WHITE: CLR_LT_WHITE = 15
 ' The Player TYPE stores information about each player during game play.
 '--------------------------------------------------------------------------
 TYPE Player
+    enabled AS INTEGER '--- 1 = Player is enabled, 2 = Player is disabled
     spriteIndex AS INTEGER '--- Stores the index values of the player sprites in the SPRITES() array.
+    spriteColor AS INTEGER '--- Color the player's default sprite should be.
     startRow AS INTEGER '--- Stores the spawn row position of the player
     startCol AS INTEGER '--- Stores the spawn col position of the player
+    score AS INTEGER '--- Total score the player has earned.
+    keyLeft AS STRING '--- Key binding to move left
+    keyRight AS STRING '--- Key binding to move right
+    keyJump AS STRING '--- Key binding to jump
+    keySpikeball AS STRING '--- Key binding to perform Spikeball attack
 END TYPE
 
-DIM SHARED PLAYER(4) AS Player '--- Stores the index values of the player sprites in the SPRITES() array.
+DIM SHARED PLAYER(2) AS Player '--- Stores the index values of the player sprites in the SPRITES() array.
 DIM SHARED PLAYER_MAX: PLAYER_MAX = NULL_INDEX '--- Number of active players in the game
+
+'--- TODO: Enable once multiplayer support is refactored in
+'PLAYER(0).enabled = 1
+'PLAYER(0).spriteColor = CLR_YELLOW
+'PLAYER(0).keyLeft = CHR$(0) + "K" '--- Left arrow key
+'PLAYER(0).keyRight = CHR$(0) + "M" '--- Right arrow key
+'PLAYER(0).keyJump = CHR$(0) + "H" '--- Up arrow key
+'PLAYER(0).keySpikeball = CHR$(0) + "P" '--- Down arrow key
+
+'PLAYER(1).enabled = 0
+'PLAYER(1).spriteColor = CLR_LT_BLUE
+'PLAYER(1).keyLeft = "a" '--- Left arrow key
+'PLAYER(1).keyRight = "d" '--- Right arrow key
+'PLAYER(1).keyJump = "w"
+'PLAYER(1).keySpikeball = "s"
 
 '--------------------------------------------------------------------------
 ' Sprite Type Constants: Used to identify select Sprite structs.
@@ -174,7 +197,7 @@ SPRITE_TYPES(SPRITE_TYPE_NONE).spriteType = SPRITE_TYPE_NONE
 '--- Player Sprite template
 SPRITE_TYPES(SPRITE_TYPE_PLAYER).spriteType = SPRITE_TYPE_PLAYER
 SPRITE_TYPES(SPRITE_TYPE_PLAYER).moveType = SPRITE_MOVE_PLAYER_CONTROLLED
-SPRITE_TYPES(SPRITE_TYPE_PLAYER).frames = ""
+SPRITE_TYPES(SPRITE_TYPE_PLAYER).frames = ""
 SPRITE_TYPES(SPRITE_TYPE_PLAYER).maxFrame = 1
 SPRITE_TYPES(SPRITE_TYPE_PLAYER).frameRate = 0
 SPRITE_TYPES(SPRITE_TYPE_PLAYER).charColor = CLR_YELLOW
@@ -202,7 +225,7 @@ SPRITE_TYPES(SPRITE_TYPE_PLAYER_DRAINED).charColor = CLR_LT_RED
 SPRITE_TYPES(SPRITE_TYPE_PLAYER_DRAINED).gravity = 1
 SPRITE_TYPES(SPRITE_TYPE_PLAYER_DRAINED).gravityTimer = 0
 SPRITE_TYPES(SPRITE_TYPE_PLAYER_DRAINED).nextSpriteType = SPRITE_TYPE_PLAYER
-SPRITE_TYPES(SPRITE_TYPE_PLAYER_DRAINED).nextSpriteTypeTimer = 12
+SPRITE_TYPES(SPRITE_TYPE_PLAYER_DRAINED).nextSpriteTypeTimer = 16
 '---  Enemy1 Sprite template
 SPRITE_TYPES(SPRITE_TYPE_ENEMY1).spriteType = SPRITE_TYPE_ENEMY1
 SPRITE_TYPES(SPRITE_TYPE_ENEMY1).moveType = SPRITE_MOVE_LR_RANDOM_GROUND
@@ -355,11 +378,15 @@ COLLISIONS(SPRITE_TYPE_SPIKE, SPRITE_TYPE_SLIDE_L) = CHAR_COLLISION_PUSH_LEFT
 COLLISIONS(SPRITE_TYPE_SPIKE, SPRITE_TYPE_SLIDE_R) = CHAR_COLLISION_PUSH_RIGHT
 COLLISIONS(SPRITE_TYPE_SPIKE, SPRITE_TYPE_NEXT_LEVEL) = CHAR_COLLISION_DEATH
 
+DIM SHARED DEAD_SPLAT$: DEAD_SPLAT$ = "_"
+
 '--------------------------------------------------------------------------
 ' Keyboard input mappings
 '--------------------------------------------------------------------------
-KEY(1) ON
-ON KEY(1) ToggleGravity
+IF DEBUG_ON THEN
+    KEY(1) ON
+    ON KEY(1) ToggleGravity
+END IF
 
 KEY(10) ON
 ON KEY(10) ExitGame
@@ -370,7 +397,8 @@ ON KEY(10) ExitGame
 SetDisplayMode
 
 WHILE GAME_STATE.nextLevel > 0 AND GAME_STATE.nextLevel < 10
-    StartNextLevel
+    LoadLevelData
+    RunMainGameLoop
 WEND
 
 SYSTEM
@@ -387,40 +415,33 @@ SUB ExitGame
 END SUB
 
 '--------------------------------------------------------------------------
-' Start playing a specified level.
+' Run the main game loop for the currently loaded level. LoadLevelData
+' must be called before this.
 '
 ' @param gameLevel% Number of the game level to start.
 '--------------------------------------------------------------------------
-SUB StartNextLevel
-    LoadLevelData GAME_STATE.nextLevel
-    ParseLevelData
-    GAME_STATE.loadedLevel = GAME_STATE.nextLevel
-    frameCount = 0
-
-    ' Keep running the game loop until the level changes from its original value.
-    ' 0 indicates game over/quit
+SUB RunMainGameLoop
+    ' Keep running the game loop until the GAME_STATE.nextLevel changes from
+    ' its original value. 0 indicates game over/quit
     WHILE GAME_STATE.nextLevel = GAME_STATE.loadedLevel
+        ChangeSpritesToNextSpriteType
         RenderSprites
-        PrintAt 29, 1, 15, "LIVES:" + STR$(SPRITES(PLAYER(PLAYER_MAX).spriteIndex).lives) + " nextLevel:" + STR$(GAME_STATE.nextLevel) + " loadedLevel:" + STR$(GAME_STATE.loadedLevel) + " frameCount:" + STR$(frameCount)
+        PrintAt SCREEN_AREA.max.row, 1, 14, GAME_STATE.levelTitle + ": Lives =" + STR$(SPRITES(PLAYER(PLAYER_MAX).spriteIndex).lives) + "  Score =" + STR$(PLAYER(PLAYER_MAX).score)
         _LIMIT GAME_STATE.frameRate
+        CheckSpecialCollisions
         MoveSprites
-        frameCount = frameCount + 1
     WEND
-
-    PrintAt 29, 1, 15, "Press any key to exit..."
-    Pause
-    GAME_STATE.nextLevel = 0
 END SUB
 
 
 '--------------------------------------------------------------------------
-' Reads level data from a file in the .\DATA subfolder.
-'
-' @param level% Number of the level to load
+' Reads level data from a file in the .\DATA subfolder. Loads the level
+' stored in the GAME_STATE.nextLevel and then updates the
+' GAME_STATE.loadedLevel upon success.
 '--------------------------------------------------------------------------
-SUB LoadLevelData (level)
+SUB LoadLevelData
     ' Open level data file
-    file$ = ".\DATA\LEV_" + LTRIM$(STR$(level)) + ".DAT"
+    file$ = ".\DATA\LEV_" + LTRIM$(STR$(GAME_STATE.nextLevel)) + ".DAT"
     OPEN file$ FOR INPUT AS #1
 
     ' First line has the title of the level to be returned
@@ -435,6 +456,12 @@ SUB LoadLevelData (level)
 
     ' Close the file handle
     CLOSE #1
+
+    '--- Update/reset variables storing level-specific data
+    GAME_STATE.loadedLevel = GAME_STATE.nextLevel
+    SPRITE_COUNT = 0
+    PLAYER_MAX = NULL_INDEX
+    ParseLevelData
 END SUB
 
 '--------------------------------------------------------------------------
@@ -467,6 +494,8 @@ SUB ParseLevelData
     FOR row = 1 TO GAME_AREA.max.row
         FOR col = 1 TO GAME_AREA.max.col
             char$ = CharAt$(row, col)
+
+            '--- Process chars that need to be changed
             SELECT CASE char$
                 CASE "Û" '--- Solid ground (random texture)
                     COLOR CLR_GRAY
@@ -480,9 +509,6 @@ SUB ParseLevelData
                 CASE "", "T" '--- Torch [T]
                     COLOR CLR_YELLOW
                     char$ = ""
-                CASE "P" '--- Pole [P]
-                    COLOR CLR_YELLOW
-                    char$ = "|" '"³"
                 CASE "S" '--- Solid color ground (untextured)
                     COLOR CLR_GRAY
                     char$ = "Û"
@@ -494,10 +520,22 @@ SUB ParseLevelData
                     COLOR CLR_GRAY
             END SELECT
 
-            LOCATE row, col: PRINT char$
-
             spriteType = GetSpriteType(char$)
-            IF spriteType THEN AddSprite spriteType, row, col
+            IF spriteType THEN
+                '--- Process Sprite chars
+                AddSprite spriteType, row, col
+            ELSE
+                '--- Process chars that need to change
+                '--- into chars that would conflict with Sprites
+                '--- if processed before the sprite detection.
+                SELECT CASE char$
+                    CASE "P" '--- Pole [P]
+                        COLOR CLR_YELLOW
+                        char$ = "³" '--- Conflicts with Spike sprite
+                END SELECT
+            END IF
+
+            LOCATE row, col: PRINT char$
         NEXT col
     NEXT row
 END SUB
@@ -518,6 +556,55 @@ FUNCTION GetSpriteIndexAt (row, col)
         END IF
     NEXT index
 END FUNCTION
+
+
+'--------------------------------------------------------------------------
+' Iterates all Sprites in the SPRITES() array, decrements their
+' nextSpriteTimer until it reaches 0, and then calls to change them
+' to their next sprite type.  Ignored if nextSpriteType is empty/0.
+'--------------------------------------------------------------------------
+SUB ChangeSpritesToNextSpriteType
+    FOR index = 0 TO SPRITE_COUNT - 1
+        '--- Count nextSpriteTimer down if it is set
+        IF SPRITES(index).nextSpriteTypeTimer > 0 THEN
+            SPRITES(index).nextSpriteTypeTimer = SPRITES(index).nextSpriteTypeTimer - 1
+        END IF
+
+        IF SPRITES(index).nextSpriteType AND SPRITES(index).nextSpriteTypeTimer < 1 THEN
+            SpriteChangeType index
+        END IF
+    NEXT index
+END SUB
+
+'--------------------------------------------------------------------------
+' Changes a Sprite to the SPRITE_TYPE_{...} value specified in its
+' .nextSpriteType property, and copies over the properties
+' that are necessary for the new Sprite.
+'
+' @param index Sprite index of the Sprite to be changed
+'--------------------------------------------------------------------------
+SUB SpriteChangeType (index)
+    DIM oldSprite AS Sprite
+    DIM newSprite AS Sprite
+
+    oldSprite = SPRITES(index)
+    newSprite = SPRITE_TYPES(oldSprite.nextSpriteType)
+
+    '--- Sprite type-specific changes here
+    SELECT CASE newSprite.spriteType
+        CASE SPRITE_TYPE_PLAYER, SPRITE_TYPE_PLAYER_SPIKEBALL, SPRITE_TYPE_PLAYER_DRAINED
+            newSprite.lives = oldSprite.lives
+            newSprite.gravityTimer = oldSprite.gravityTimer
+    END SELECT
+
+    '--- Changes that carry over for all types.
+    newSprite.position = oldSprite.position
+    newSprite.velocity = oldSprite.velocity
+    newSprite.moveTo = oldSprite.moveTo
+
+    SPRITES(index) = newSprite
+END SUB
+
 
 '--------------------------------------------------------------------------
 ' Process movement for all active sprites.
@@ -544,9 +631,9 @@ SUB MoveSprites
             '--- Move the Sprite using the new velocity values
             SpriteChangeMoveTarget index, originalRow + SPRITES(index).velocity.row, originalCol + SPRITES(index).velocity.col
 
-            '--- If the sprite moved clear the spot it was in
+            '--- If the sprite moved and did not leave a "dead splat" clear the spot it was in
             IF originalRow <> SPRITES(index).position.row OR originalCol <> SPRITES(index).position.col THEN
-                IF SpriteIsActive(SPRITES(index)) THEN PrintAt originalRow, originalCol, 0, " "
+                IF SpriteIsActive(SPRITES(index)) AND CharAt$(originalRow, originalCol) <> DEAD_SPLAT$ THEN PrintAt originalRow, originalCol, 0, " "
             END IF
         END IF
     NEXT index
@@ -559,6 +646,18 @@ END SUB
 ' @param index Sprite index to apply gravity to.
 '--------------------------------------------------------------------------
 SUB SpriteApplyGravity (index)
+
+    '---Player landing on solid ground/slides ends jump
+    IF SPRITES(index).gravityTimer > 0 THEN
+        IF SPRITES(index).moveType = SPRITE_MOVE_PLAYER_CONTROLLED THEN
+            rowBelow = SPRITES(index).position.row + SGN(GAME_STATE.gravity)
+            collisionBelow = GetCollisionType(index, GetSpriteIndexAt(rowBelow, SPRITES(index).position.col), CharAt$(rowBelow, SPRITES(index).position.col))
+            IF collisionBelow = CHAR_COLLISION_SOLID OR collisionBelow = CHAR_COLLISION_PUSH_LEFT OR collisionBelow = CHAR_COLLISION_PUSH_RIGHT THEN
+                SPRITES(index).gravityTimer = 0
+            END IF
+        END IF
+    END IF
+
     '--- Apply gravity based on sprite settings
     IF SPRITES(index).gravityTimer = 0 THEN
         IF SPRITES(index).gravity THEN
@@ -640,14 +739,22 @@ SUB SpriteMovePlayerControlled (spriteIndex)
         CASE CHR$(0) + "K" '--- Left
             SPRITES(spriteIndex).velocity.col = -1
         CASE " " '--- Jump
-            SPRITES(spriteIndex).velocity.row = SPRITES(index).gravity * GAME_STATE.gravity * -1
-            SPRITES(spriteIndex).gravityTimer = 16
+            rowBelow = SPRITES(spriteIndex).position.row + SGN(GAME_STATE.gravity)
+            colBelow = SPRITES(spriteIndex).position.col
+            collisionBelow = GetCollisionType(spriteIndex, GetSpriteIndexAt(rowBelow, colBelow), CharAt$(rowBelow, colBelow))
+
+            IF collisionBelow = CHAR_COLLISION_SOLID OR collisionBelow = CHAR_COLLISION_PUSH_LEFT OR collisionBelow = CHAR_COLLISION_PUSH_RIGHT THEN
+                SPRITES(spriteIndex).velocity.row = SPRITES(index).gravity * GAME_STATE.gravity * -1
+                SPRITES(spriteIndex).gravityTimer = 16
+            END IF
         CASE IS = "S" '--- Toggle Sound
             IF GAME_STATE.soundEnabled = 0 THEN GAME_STATE.soundEnabled = 1 ELSE GAME_STATE.soundEnabled = 0
         CASE IS = "B" '--- Spikeball attach
-            SPRITES(spriteIndex).nextSpriteType = SPRITE_TYPE_PLAYER_SPIKEBALL
-            SPRITES(spriteIndex).nextSpriteTypeTimer = 0
-            SPRITES(spriteIndex).velocity.col = 0
+            IF SPRITES(spriteIndex).spriteType <> SPRITE_TYPE_PLAYER_DRAINED THEN
+                SPRITES(spriteIndex).nextSpriteType = SPRITE_TYPE_PLAYER_SPIKEBALL
+                SPRITES(spriteIndex).nextSpriteTypeTimer = 0
+                SPRITES(spriteIndex).velocity.col = 0
+            END IF
         CASE ELSE
             SPRITES(spriteIndex).velocity.col = 0
     END SELECT
@@ -719,7 +826,7 @@ FUNCTION GetCollisionType (spriteIndex, targetSpriteIndex, targetChar$)
         GetCollisionType = COLLISIONS(SPRITES(spriteIndex).spriteType, SPRITES(targetSpriteIndex).spriteType)
     ELSE
         SELECT CASE targetChar$
-            CASE " ", "_"
+            CASE " ", DEAD_SPLAT$
                 GetCollisionType = CHAR_COLLISION_NONE
             CASE ELSE
                 GetCollisionType = CHAR_COLLISION_SOLID
@@ -794,6 +901,34 @@ SUB CheckCollision (spriteIndex, row, col)
         CASE ELSE
             SpriteBlockMove spriteIndex, row, col
     END SELECT
+END SUB
+
+'--------------------------------------------------------------------------
+' Similar to CheckCollision but handles non-movement cases such as the
+' Spikeball that attacks the spaces to its sides.  Add any special collision
+' cases here where the Sprites are not technically touching but collision
+' rules should be applied.
+'--------------------------------------------------------------------------
+SUB CheckSpecialCollisions
+    FOR index = 0 TO SPRITE_COUNT - 1
+        DIM sprite AS Sprite: sprite = SPRITES(index)
+
+        SELECT CASE sprite.spriteType
+            CASE SPRITE_TYPE_PLAYER_SPIKEBALL
+                '--- Spikeball attacks directly to left/right, check for collisions on both
+                FOR colOffset = -1 TO 1 STEP 2
+                    targetIndex = GetSpriteIndexAt(sprite.position.row, sprite.position.col + colOffset)
+
+                    '--- If a sprite is found and a spikeball collision kills it, then kill it
+                    IF targetIndex <> NULL_INDEX THEN
+                        IF COLLISIONS(sprite.spriteType, SPRITES(targetIndex).spriteType) = CHAR_COLLISION_ENEMY_DEATH THEN
+                            SpriteDeath targetIndex
+                        END IF
+                    END IF
+                NEXT colOffset
+        END SELECT
+
+    NEXT index
 END SUB
 
 '--------------------------------------------------------------------------
@@ -910,10 +1045,17 @@ SUB SpriteDeath (spriteIndex)
             SPRITES(spriteIndex).lives = sprite.lives
             IF GAME_STATE.soundEnabled THEN SOUND 57, 10
             IF SPRITES(spriteIndex).lives < 1 THEN GAME_STATE.nextLevel = 0
+
+            '--- Leave a splat the same color as the player was
+            PrintAt sprite.position.row, sprite.position.col, sprite.charColor, DEAD_SPLAT$
         CASE SPRITE_TYPE_ENEMY1
             '--- Show a red splat for dead Enemy1 sprites
+            IF GAME_STATE.soundEnabled THEN SOUND 80, 2
             replacementColor = CLR_GREEN
-            replacementChar$ = "_"
+            replacementChar$ = DEAD_SPLAT$
+            PLAYER(PLAYER_MAX).score = PLAYER(PLAYER_MAX).score + 50
+        CASE SPRITE_TYPE_EXTRA_LIFE
+            PLAYER(PLAYER_MAX).score = PLAYER(PLAYER_MAX).score + 200
     END SELECT
 
     '--- Disable the Sprite if it is out of lives
@@ -1000,6 +1142,12 @@ END FUNCTION
 '--------------------------------------------------------------------------
 FUNCTION AnimateSpriteColor (sprite AS Sprite)
     SELECT CASE sprite.spriteType
+        CASE SPRITE_TYPE_PLAYER_SPIKEBALL
+            IF sprite.charColor = CLR_LT_WHITE THEN
+                AnimateSpriteColor = CLR_LT_RED
+            ELSE
+                AnimateSpriteColor = CLR_LT_WHITE
+            END IF
         CASE SPRITE_TYPE_FIRE
             colorRandomizer = INT(RND * 2)
             IF colorRandomizer = 0 THEN AnimateSpriteColor = CLR_RED
@@ -1139,7 +1287,7 @@ END FUNCTION
 '--------------------------------------------------------------------------
 SUB Debug (msg$)
     IF DEBUG_ON THEN
-        PrintAt 30, 1, 10, msg$
+        PrintAt SCREEN_AREA.max.row - 1, 1, 10, msg$
     END IF
 END SUB
 
@@ -1188,7 +1336,7 @@ SUB DebugSpriteCoords (spriteIndex, msg$)
         DIM sprite AS Sprite
         sprite = SPRITES(spriteIndex)
 
-        LOCATE 30, 1
+        LOCATE SCREEN_AREA.max.row - 1, 1
         PRINT msg$;
         PRINT " i:" + STR$(spriteIndex);
         PRINT " p.r:" + STR$(sprite.position.row);
