@@ -41,6 +41,12 @@ DIM SHARED DEBUG_SPRITE_INDEX: DEBUG_SPRITE_INDEX = NULL_INDEX '--- For tracking
 DIM SHARED DEBUG_CALLER AS STRING: DEBUG_CALLER = "NONE" '--- For tracking calling SUBs (stack tracing)
 
 '--------------------------------------------------------------------------
+' Used to store all chars from the keyboard input buffer each frame
+'--------------------------------------------------------------------------
+DIM SHARED KEY_INPUT(10) AS STRING
+DIM SHARED KEY_INPUT_MAX: KEY_INPUT_MAX = 0
+
+'--------------------------------------------------------------------------
 ' Dimensions of the screen
 '--------------------------------------------------------------------------
 DIM SHARED SCREEN_AREA AS Rectangle
@@ -94,23 +100,22 @@ TYPE Player
     keySpikeball AS STRING '--- Key binding to perform Spikeball attack
 END TYPE
 
-DIM SHARED PLAYER(2) AS Player '--- Stores the index values of the player sprites in the SPRITES() array.
-DIM SHARED PLAYER_MAX: PLAYER_MAX = NULL_INDEX '--- Number of active players in the game
+DIM SHARED PLAYER(5) AS Player '--- Stores the index values of the player sprites in the SPRITES() array.
+DIM SHARED PLAYER_MAX: PLAYER_MAX = 0 '--- Number of active players in the game
 
-'--- TODO: Enable once multiplayer support is refactored in
-'PLAYER(0).enabled = 1
-'PLAYER(0).spriteColor = CLR_YELLOW
-'PLAYER(0).keyLeft = CHR$(0) + "K" '--- Left arrow key
-'PLAYER(0).keyRight = CHR$(0) + "M" '--- Right arrow key
-'PLAYER(0).keyJump = CHR$(0) + "H" '--- Up arrow key
-'PLAYER(0).keySpikeball = CHR$(0) + "P" '--- Down arrow key
+PLAYER(1).enabled = 1
+PLAYER(1).spriteColor = CLR_YELLOW
+PLAYER(1).keyLeft = CHR$(0) + "K" '--- Left arrow key
+PLAYER(1).keyRight = CHR$(0) + "M" '--- Right arrow key
+PLAYER(1).keyJump = CHR$(0) + "H" '--- Up arrow key
+PLAYER(1).keySpikeball = CHR$(0) + "P" '--- Down arrow key
 
-'PLAYER(1).enabled = 0
-'PLAYER(1).spriteColor = CLR_LT_BLUE
-'PLAYER(1).keyLeft = "a" '--- Left arrow key
-'PLAYER(1).keyRight = "d" '--- Right arrow key
-'PLAYER(1).keyJump = "w"
-'PLAYER(1).keySpikeball = "s"
+PLAYER(2).enabled = 0
+PLAYER(2).spriteColor = CLR_LT_BLUE
+PLAYER(2).keyLeft = "A"
+PLAYER(2).keyRight = "D"
+PLAYER(2).keyJump = "W"
+PLAYER(2).keySpikeball = "S"
 
 '--------------------------------------------------------------------------
 ' Sprite Type Constants: Used to identify select Sprite structs.
@@ -174,6 +179,7 @@ TYPE Sprite
     moveTo AS Coord '--- Used internally as the sprite is being moved and velocity is being applied. Do not modify directly.
     moveTimer AS INTEGER '--- Number of game frames to disallow automatic or player controlled movement.
     friction AS INTEGER '--- Amount of velocity reduction to apply each frame when on a solid. Defaults to 1.
+    playerIndex AS INTEGER '--- Index of the PLAYER() that controls the sprite. 0 = not player controlled (default).
 END TYPE
 
 DIM SHARED SPRITES(200) AS Sprite '--- Array to store all active game sprites
@@ -388,6 +394,10 @@ IF DEBUG_ON THEN
     ON KEY(1) ToggleGravity
 END IF
 
+KEY(2) ON
+ON KEY(2) ToggleSound
+
+
 KEY(10) ON
 ON KEY(10) ExitGame
 
@@ -414,6 +424,10 @@ SUB ExitGame
     SYSTEM
 END SUB
 
+SUB ToggleSound
+    IF GAME_STATE.soundEnabled = 0 THEN GAME_STATE.soundEnabled = 1 ELSE GAME_STATE.soundEnabled = 0
+END SUB
+
 '--------------------------------------------------------------------------
 ' Run the main game loop for the currently loaded level. LoadLevelData
 ' must be called before this.
@@ -426,11 +440,21 @@ SUB RunMainGameLoop
     WHILE GAME_STATE.nextLevel = GAME_STATE.loadedLevel
         ChangeSpritesToNextSpriteType
         RenderSprites
-        PrintAt SCREEN_AREA.max.row, 1, 14, GAME_STATE.levelTitle + ": Lives =" + STR$(SPRITES(PLAYER(PLAYER_MAX).spriteIndex).lives) + "  Score =" + STR$(PLAYER(PLAYER_MAX).score)
+        RenderStatusLine
         _LIMIT GAME_STATE.frameRate
         CheckSpecialCollisions
         MoveSprites
     WEND
+END SUB
+
+SUB RenderStatusLine
+    PrintAt SCREEN_AREA.max.row, 1, 15, GAME_STATE.levelTitle
+
+    FOR p = 1 TO PLAYER_MAX
+        COLOR PLAYER(p).spriteColor
+        PRINT ": Lives =" + STR$(SPRITES(PLAYER(p).spriteIndex).lives) + "  Score =" + STR$(PLAYER(p).score);
+    NEXT p
+
 END SUB
 
 
@@ -460,7 +484,7 @@ SUB LoadLevelData
     '--- Update/reset variables storing level-specific data
     GAME_STATE.loadedLevel = GAME_STATE.nextLevel
     SPRITE_COUNT = 0
-    PLAYER_MAX = NULL_INDEX
+    PLAYER_MAX = 0
     ParseLevelData
 END SUB
 
@@ -595,6 +619,10 @@ SUB SpriteChangeType (index)
         CASE SPRITE_TYPE_PLAYER, SPRITE_TYPE_PLAYER_SPIKEBALL, SPRITE_TYPE_PLAYER_DRAINED
             newSprite.lives = oldSprite.lives
             newSprite.gravityTimer = oldSprite.gravityTimer
+            newSprite.playerIndex = oldSprite.playerIndex
+            IF newSprite.spriteType = SPRITE_TYPE_PLAYER THEN
+                newSprite.charColor = PLAYER(oldSprite.playerIndex).spriteColor
+            END IF
     END SELECT
 
     '--- Changes that carry over for all types.
@@ -611,6 +639,8 @@ END SUB
 ' Gets called by game loop once per frame.
 '--------------------------------------------------------------------------
 SUB MoveSprites
+    GetKeyInput
+
     FOR index = 0 TO SPRITE_COUNT - 1
         '--- Only move sprite if it is alive and in a valid game area position
         IF SpriteIsActive(SPRITES(index)) THEN
@@ -731,35 +761,39 @@ END SUB
 ' @param spriteIndex SPRITES() array index of the player-controlled Sprite.
 '--------------------------------------------------------------------------
 SUB SpriteMovePlayerControlled (spriteIndex)
-    SELECT CASE UCASE$(INKEY$)
-        CASE CHR$(27) '--- Escape
-            GAME_STATE.nextLevel = 0
-        CASE CHR$(0) + "M" '--- Right
-            SPRITES(spriteIndex).velocity.col = 1
-        CASE CHR$(0) + "K" '--- Left
-            SPRITES(spriteIndex).velocity.col = -1
-        CASE " " '--- Jump
-            rowBelow = SPRITES(spriteIndex).position.row + SGN(GAME_STATE.gravity)
-            colBelow = SPRITES(spriteIndex).position.col
-            collisionBelow = GetCollisionType(spriteIndex, GetSpriteIndexAt(rowBelow, colBelow), CharAt$(rowBelow, colBelow))
+    DIM player AS Player
+    player = PLAYER(SPRITES(spriteIndex).playerIndex)
 
-            IF collisionBelow = CHAR_COLLISION_SOLID OR collisionBelow = CHAR_COLLISION_PUSH_LEFT OR collisionBelow = CHAR_COLLISION_PUSH_RIGHT THEN
-                SPRITES(spriteIndex).velocity.row = SPRITES(index).gravity * GAME_STATE.gravity * -1
-                SPRITES(spriteIndex).gravityTimer = 16
-            END IF
-        CASE IS = "S" '--- Toggle Sound
-            IF GAME_STATE.soundEnabled = 0 THEN GAME_STATE.soundEnabled = 1 ELSE GAME_STATE.soundEnabled = 0
-        CASE IS = "B" '--- Spikeball attach
-            IF SPRITES(spriteIndex).spriteType <> SPRITE_TYPE_PLAYER_DRAINED THEN
-                SPRITES(spriteIndex).nextSpriteType = SPRITE_TYPE_PLAYER_SPIKEBALL
-                SPRITES(spriteIndex).nextSpriteTypeTimer = 0
+    '--- Process all characters in the INKEY$ buffer by looping/reading each
+
+    FOR k = 0 TO KEY_INPUT_MAX
+        '--- Player-specific key presses
+        SELECT CASE UCASE$(KEY_INPUT(k))
+            CASE player.keyRight
+                SPRITES(spriteIndex).velocity.col = 1
+            CASE player.keyLeft
+                SPRITES(spriteIndex).velocity.col = -1
+            CASE player.keyJump
+                rowBelow = SPRITES(spriteIndex).position.row + SGN(GAME_STATE.gravity)
+                colBelow = SPRITES(spriteIndex).position.col
+                collisionBelow = GetCollisionType(spriteIndex, GetSpriteIndexAt(rowBelow, colBelow), CharAt$(rowBelow, colBelow))
+
+                IF collisionBelow = CHAR_COLLISION_SOLID OR collisionBelow = CHAR_COLLISION_PUSH_LEFT OR collisionBelow = CHAR_COLLISION_PUSH_RIGHT THEN
+                    SPRITES(spriteIndex).velocity.row = SPRITES(index).gravity * GAME_STATE.gravity * -1
+                    SPRITES(spriteIndex).gravityTimer = 16
+                END IF
+            CASE player.keySpikeball
+                IF SPRITES(spriteIndex).spriteType <> SPRITE_TYPE_PLAYER_DRAINED THEN
+                    SPRITES(spriteIndex).nextSpriteType = SPRITE_TYPE_PLAYER_SPIKEBALL
+                    SPRITES(spriteIndex).nextSpriteTypeTimer = 0
+                    SPRITES(spriteIndex).velocity.col = 0
+                END IF
+            CASE CHR$(27) '--- Escape
+                GAME_STATE.nextLevel = 0
+            CASE ELSE
                 SPRITES(spriteIndex).velocity.col = 0
-            END IF
-        CASE ELSE
-            SPRITES(spriteIndex).velocity.col = 0
-    END SELECT
-
-    ClearInkey
+        END SELECT
+    NEXT k
 END SUB
 
 '--------------------------------------------------------------------------
@@ -1027,22 +1061,16 @@ SUB SpriteDeath (spriteIndex)
 
     SELECT CASE sprite.spriteType
         CASE SPRITE_TYPE_PLAYER, SPRITE_TYPE_PLAYER_SPIKEBALL, SPRITE_TYPE_PLAYER_DRAINED
-            '--- Reset player sprite to default player template values
-            SPRITES(spriteIndex) = SPRITE_TYPES(SPRITE_TYPE_PLAYER)
-
             '--- Move the Sprite back to the player's original starting position
-            FOR playerIndex = 0 TO PLAYER_MAX
-                IF PLAYER(playerIndex).spriteIndex = spriteIndex THEN
-                    SPRITES(spriteIndex).position.row = PLAYER(playerIndex).startRow
-                    SPRITES(spriteIndex).position.col = PLAYER(playerIndex).startCol
-                    SPRITES(spriteIndex).moveTo.row = PLAYER(playerIndex).startRow
-                    SPRITES(spriteIndex).moveTo.col = PLAYER(playerIndex).startCol
-                    EXIT FOR
-                END IF
-            NEXT playerIndex
+            playerIndex = sprite.playerIndex
+            SPRITES(spriteIndex).position.row = PLAYER(playerIndex).startRow
+            SPRITES(spriteIndex).position.col = PLAYER(playerIndex).startCol
+            SPRITES(spriteIndex).moveTo.row = PLAYER(playerIndex).startRow
+            SPRITES(spriteIndex).moveTo.col = PLAYER(playerIndex).startCol
+            SPRITES(spriteIndex).velocity.row = 0
+            SPRITES(spriteIndex).velocity.col = 0
 
             '--- Replace the template's .lives value with the deducted value
-            SPRITES(spriteIndex).lives = sprite.lives
             IF GAME_STATE.soundEnabled THEN SOUND 57, 10
             IF SPRITES(spriteIndex).lives < 1 THEN GAME_STATE.nextLevel = 0
 
@@ -1191,6 +1219,8 @@ SUB AddSprite (spriteType%, row%, col%)
         PLAYER(PLAYER_MAX).spriteIndex = SPRITE_COUNT
         PLAYER(PLAYER_MAX).startRow = row%
         PLAYER(PLAYER_MAX).startCol = col%
+        SPRITES(SPRITE_COUNT).playerIndex = PLAYER_MAX
+        SPRITES(SPRITE_COUNT).charColor = PLAYER(PLAYER_MAX).spriteColor
     END IF
 
     '--- Update sprite count so we know how many there are
@@ -1347,4 +1377,15 @@ SUB DebugSpriteCoords (spriteIndex, msg$)
         PRINT " v.c:" + STR$(sprite.velocity.col);
         PRINT " ";
     END IF
+END SUB
+
+SUB GetKeyInput
+    KEY_INPUT_MAX = 0
+    nextChar$ = INKEY$
+
+    WHILE nextChar$ <> ""
+        KEY_INPUT_MAX = KEY_INPUT_MAX + 1 '--- Note: KEY_INPUT(0) should stay empty, skip it when looping
+        KEY_INPUT(KEY_INPUT_MAX) = nextChar$
+        nextChar$ = INKEY$
+    WEND
 END SUB
