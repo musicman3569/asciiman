@@ -23,15 +23,17 @@ TYPE GameState
     levelTitle AS STRING '--- Title of the currently loaded level.
     gravity AS INTEGER '--- Global gravity direction to combine with Sprite gravity settings.
     frameRate AS INTEGER '--- Framerate the game loop runs at in frames-per-second.
+    playerCount AS INTEGER '--- Number of active players to load into the level
 END TYPE
 
 '--- Initialize global game state
 DIM SHARED GAME_STATE AS GameState
 GAME_STATE.soundEnabled = 1
 GAME_STATE.loadedLevel = 0
-GAME_STATE.nextLevel = 1
+GAME_STATE.nextLevel = 7
 GAME_STATE.gravity = 1
 GAME_STATE.frameRate = 18
+GAME_STATE.playerCount = 2
 
 '--------------------------------------------------------------------------
 ' Debugging variables for tracking information, changing values has no functional impact.
@@ -207,7 +209,7 @@ SPRITE_TYPES(SPRITE_TYPE_NONE).spriteType = SPRITE_TYPE_NONE
 '--- Player Sprite template
 SPRITE_TYPES(SPRITE_TYPE_PLAYER).spriteType = SPRITE_TYPE_PLAYER
 SPRITE_TYPES(SPRITE_TYPE_PLAYER).moveType = SPRITE_MOVE_PLAYER_CONTROLLED
-SPRITE_TYPES(SPRITE_TYPE_PLAYER).frames = ""
+SPRITE_TYPES(SPRITE_TYPE_PLAYER).frames = ""
 SPRITE_TYPES(SPRITE_TYPE_PLAYER).maxFrame = 1
 SPRITE_TYPES(SPRITE_TYPE_PLAYER).frameRate = 0
 SPRITE_TYPES(SPRITE_TYPE_PLAYER).charColor = CLR_YELLOW
@@ -784,7 +786,6 @@ SUB SpriteMovePlayerControlled (spriteIndex)
         KEY_NEEDS_RELEASE(player.keyJump) = 1
 
         PLAYER(playerIndex).jumpDistance = player.maxJumpDistance
-        Debug "Start Jump: " + STR$(PLAYER(playerIndex).jumpDistance) + "  "
 
         '--- Check what is gravitationally below the player
         rowBelow = SPRITES(spriteIndex).position.row + SGN(GAME_STATE.gravity)
@@ -1254,16 +1255,23 @@ SUB AddSprite (spriteType%, row%, col%)
 
     '--- Register the SPRITES() index value of player sprites so we know which ones they are.
     IF spriteType% = SPRITE_TYPE_PLAYER THEN
+
         PLAYER_MAX = PLAYER_MAX + 1
         PLAYER(PLAYER_MAX).spriteIndex = SPRITE_COUNT
         PLAYER(PLAYER_MAX).startRow = row%
         PLAYER(PLAYER_MAX).startCol = col%
         SPRITES(SPRITE_COUNT).playerIndex = PLAYER_MAX
         SPRITES(SPRITE_COUNT).charColor = PLAYER(PLAYER_MAX).spriteColor
-    END IF
+        SPRITE_COUNT = SPRITE_COUNT + 1
 
-    '--- Update sprite count so we know how many there are
-    SPRITE_COUNT = SPRITE_COUNT + 1
+        '--- Recursively add player sprites until all players are added
+        IF (PLAYER_MAX < GAME_STATE.playerCount) THEN
+            AddSprite SPRITE_TYPE_PLAYER, row%, col%
+        END IF
+    ELSE
+        '--- Update sprite count so we know how many there are
+        SPRITE_COUNT = SPRITE_COUNT + 1
+    END IF
 END SUB
 
 '--------------------------------------------------------------------------
