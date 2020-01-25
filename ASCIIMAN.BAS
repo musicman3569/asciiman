@@ -43,8 +43,8 @@ DIM SHARED DEBUG_CALLER AS STRING: DEBUG_CALLER = "NONE" '--- For tracking calli
 '--------------------------------------------------------------------------
 ' Used to store all chars from the keyboard input buffer each frame
 '--------------------------------------------------------------------------
-DIM SHARED KEY_INPUT(10) AS STRING
-DIM SHARED KEY_INPUT_MAX: KEY_INPUT_MAX = 0
+DIM SHARED KEY_INPUT(0 TO 127)
+DIM SHARED KEY_NEEDS_RELEASE(0 TO 127) '--- Flag indicating that a key needs to be released before its input can be used again.
 
 '--------------------------------------------------------------------------
 ' Dimensions of the screen
@@ -94,10 +94,12 @@ TYPE Player
     startRow AS INTEGER '--- Stores the spawn row position of the player
     startCol AS INTEGER '--- Stores the spawn col position of the player
     score AS INTEGER '--- Total score the player has earned.
-    keyLeft AS STRING '--- Key binding to move left
-    keyRight AS STRING '--- Key binding to move right
-    keyJump AS STRING '--- Key binding to jump
-    keySpikeball AS STRING '--- Key binding to perform Spikeball attack
+    keyLeft AS INTEGER '--- Key binding to move left (ASCII char code)
+    keyRight AS INTEGER '--- Key binding to move right (ASCII char code)
+    keyJump AS INTEGER '--- Key binding to jump (ASCII char code)
+    keySpikeball AS INTEGER '--- Key binding to perform Spikeball attack (ASCII char code)
+    maxJumpDistance AS INTEGER '--- Max number of cols a player can jump
+    jumpDistance AS INTEGER '--- Stores the remaining number of jump cols during jumps
 END TYPE
 
 DIM SHARED PLAYER(5) AS Player '--- Stores the index values of the player sprites in the SPRITES() array.
@@ -105,17 +107,19 @@ DIM SHARED PLAYER_MAX: PLAYER_MAX = 0 '--- Number of active players in the game
 
 PLAYER(1).enabled = 1
 PLAYER(1).spriteColor = CLR_YELLOW
-PLAYER(1).keyLeft = CHR$(0) + "K" '--- Left arrow key
-PLAYER(1).keyRight = CHR$(0) + "M" '--- Right arrow key
-PLAYER(1).keyJump = CHR$(0) + "H" '--- Up arrow key
-PLAYER(1).keySpikeball = CHR$(0) + "P" '--- Down arrow key
+PLAYER(1).keyLeft = 75 '--- Left arrow key
+PLAYER(1).keyRight = 77 '--- Right arrow key
+PLAYER(1).keyJump = 72 '--- Up arrow key
+PLAYER(1).keySpikeball = 80 '--- Down arrow key
+PLAYER(1).maxJumpDistance = 9
 
 PLAYER(2).enabled = 0
 PLAYER(2).spriteColor = CLR_LT_BLUE
-PLAYER(2).keyLeft = "A"
-PLAYER(2).keyRight = "D"
-PLAYER(2).keyJump = "W"
-PLAYER(2).keySpikeball = "S"
+PLAYER(2).keyLeft = 30 '--- A
+PLAYER(2).keyRight = 32 '--- D
+PLAYER(2).keyJump = 17 '--- W
+PLAYER(2).keySpikeball = 31 '---S
+PLAYER(2).maxJumpDistance = 9
 
 '--------------------------------------------------------------------------
 ' Sprite Type Constants: Used to identify select Sprite structs.
@@ -762,38 +766,57 @@ END SUB
 '--------------------------------------------------------------------------
 SUB SpriteMovePlayerControlled (spriteIndex)
     DIM player AS Player
-    player = PLAYER(SPRITES(spriteIndex).playerIndex)
+    playerIndex = SPRITES(spriteIndex).playerIndex
+    player = PLAYER(playerIndex)
 
-    '--- Process all characters in the INKEY$ buffer by looping/reading each
+    '--- Player left/right movement
+    IF CheckKeyInput(player.keyRight) THEN
+        SPRITES(spriteIndex).velocity.col = 1
+    ELSEIF CheckKeyInput(player.keyLeft) THEN
+        SPRITES(spriteIndex).velocity.col = -1
+    ELSE
+        SPRITES(spriteIndex).velocity.col = 0
+    END IF
 
-    FOR k = 0 TO KEY_INPUT_MAX
-        '--- Player-specific key presses
-        SELECT CASE UCASE$(KEY_INPUT(k))
-            CASE player.keyRight
-                SPRITES(spriteIndex).velocity.col = 1
-            CASE player.keyLeft
-                SPRITES(spriteIndex).velocity.col = -1
-            CASE player.keyJump
-                rowBelow = SPRITES(spriteIndex).position.row + SGN(GAME_STATE.gravity)
-                colBelow = SPRITES(spriteIndex).position.col
-                collisionBelow = GetCollisionType(spriteIndex, GetSpriteIndexAt(rowBelow, colBelow), CharAt$(rowBelow, colBelow))
+    '--- Player jump
+    IF CheckKeyInput(player.keyJump) THEN
+        '--- Require jump key to be released before jumping again
+        KEY_NEEDS_RELEASE(player.keyJump) = 1
 
-                IF collisionBelow = CHAR_COLLISION_SOLID OR collisionBelow = CHAR_COLLISION_PUSH_LEFT OR collisionBelow = CHAR_COLLISION_PUSH_RIGHT THEN
-                    SPRITES(spriteIndex).velocity.row = SPRITES(index).gravity * GAME_STATE.gravity * -1
-                    SPRITES(spriteIndex).gravityTimer = 16
-                END IF
-            CASE player.keySpikeball
-                IF SPRITES(spriteIndex).spriteType <> SPRITE_TYPE_PLAYER_DRAINED THEN
-                    SPRITES(spriteIndex).nextSpriteType = SPRITE_TYPE_PLAYER_SPIKEBALL
-                    SPRITES(spriteIndex).nextSpriteTypeTimer = 0
-                    SPRITES(spriteIndex).velocity.col = 0
-                END IF
-            CASE CHR$(27) '--- Escape
-                GAME_STATE.nextLevel = 0
-            CASE ELSE
-                SPRITES(spriteIndex).velocity.col = 0
-        END SELECT
-    NEXT k
+        PLAYER(playerIndex).jumpDistance = player.maxJumpDistance
+        Debug "Start Jump: " + STR$(PLAYER(playerIndex).jumpDistance) + "  "
+
+        '--- Check what is gravitationally below the player
+        rowBelow = SPRITES(spriteIndex).position.row + SGN(GAME_STATE.gravity)
+        colBelow = SPRITES(spriteIndex).position.col
+        collisionBelow = GetCollisionType(spriteIndex, GetSpriteIndexAt(rowBelow, colBelow), CharAt$(rowBelow, colBelow))
+
+        '--- Only jump when on solid ground or slides
+        IF collisionBelow = CHAR_COLLISION_SOLID OR collisionBelow = CHAR_COLLISION_PUSH_LEFT OR collisionBelow = CHAR_COLLISION_PUSH_RIGHT THEN
+            SPRITES(spriteIndex).velocity.row = SPRITES(index).gravity * GAME_STATE.gravity * -1
+            SPRITES(spriteIndex).gravityTimer = 16
+        END IF
+    END IF
+
+
+    '--- Player spikeball attack
+    IF CheckKeyInput(player.keySpikeball) THEN
+        IF SPRITES(spriteIndex).spriteType <> SPRITE_TYPE_PLAYER_DRAINED THEN
+            KEY_NEEDS_RELEASE(player.keyLeft) = 1 '--- Spikeball interrupts left movement
+            KEY_NEEDS_RELEASE(player.keyRight) = 1 '--- Spikeball interrupts right movement
+            KEY_NEEDS_RELEASE(player.keySpikeball) = 1 '--- Must release key before attacking again
+
+            SPRITES(spriteIndex).nextSpriteType = SPRITE_TYPE_PLAYER_SPIKEBALL
+            SPRITES(spriteIndex).nextSpriteTypeTimer = 0
+            SPRITES(spriteIndex).velocity.col = 0
+        END IF
+    END IF
+
+    '--- Escape
+    IF KEY_INPUT(27) THEN
+        GAME_STATE.nextLevel = 0
+    END IF
+
 END SUB
 
 '--------------------------------------------------------------------------
@@ -821,7 +844,7 @@ END SUB
 ' Moves the sprite 1 unit toward its .moveTo property coordinates,
 ' and calls for collision handling. This ensures that all collisions
 ' along the movement path will be handled by moving in a straight line,
-' on unit at a time.
+' one unit at a time.
 '
 ' @param spriteIndex Index of the Sprite to move.
 '--------------------------------------------------------------------------
@@ -977,6 +1000,22 @@ END SUB
 SUB SpriteAllowMove (spriteIndex, row, col)
     SPRITES(spriteIndex).position.row = row
     SPRITES(spriteIndex).position.col = col
+
+    '--- Check if this is a player sprite
+    IF SPRITES(spriteIndex).playerIndex THEN
+        playerIndex = SPRITES(spriteIndex).playerIndex
+
+        '--- Check if the player is currently jumping
+        IF SPRITES(spriteIndex).gravityTimer > 0 THEN
+
+            '--- Reduce the remaining jump distance allowed
+            PLAYER(playerIndex).jumpDistance = PLAYER(playerIndex).jumpDistance - 1
+
+            '--- End the jump if the jump distance runs out
+            IF PLAYER(playerIndex).jumpDistance = 0 THEN SPRITES(spriteIndex).gravityTimer = 0
+        END IF
+    END IF
+
     SpriteMoveTowardTarget spriteIndex
 END SUB
 
@@ -1308,6 +1347,56 @@ FUNCTION GetMin (valueA, valueB)
     IF (valueA < valueB) THEN GetMin = valueA ELSE GetMin = valueB
 END FUNCTION
 
+'--------------------------------------------------------------------------
+' Checks to see if a character code is currently being pressed
+' and hasn't been set to require release before receiving input again.
+' To require a key to be released, set KEY_NEEDS_RELEASE(charCode) to 1
+' anywhere in the game loop.
+'
+' @param charCode ASCII character code of the key to check for input.
+'--------------------------------------------------------------------------
+FUNCTION CheckKeyInput (charCode)
+    IF KEY_INPUT(charCode) THEN
+        IF KEY_NEEDS_RELEASE(charCode) THEN
+            CheckKeyInput = 0
+        ELSE
+            CheckKeyInput = 1
+        END IF
+    ELSE
+        KEY_NEEDS_RELEASE(charCode) = 0
+        CheckKeyInput = 0
+    END IF
+END FUNCTION
+
+'--------------------------------------------------------------------------
+' Reads keyboard input directly from the hardware buffers and stores
+' all currently pressed character codes in the KEY_INPUT() array,
+' where the index is character code. Unpressed KEY_INPUTs will equal 0.
+'
+' Instead of reading from KEY_INPUT to check the result of this SUB
+' and see if a key is pressed, use the FUNCTION CheckKeyInput(charCode),
+' which also verifies a key release is not required first.
+'--------------------------------------------------------------------------
+SUB GetKeyInput
+    '--- Read keyboard input directly from hardware register
+    i% = INP(&H60)
+
+    '--- Clear all previous values if none are pressed
+    IF i% = 170 OR i% = 54 OR i% = 42 THEN
+        FOR a = 0 TO 127
+            KEY_INPUT(a) = 0
+        NEXT a
+    END IF
+
+    '--- Clear keys that have been released (Key Up event = 128)
+    IF (i% AND 128) THEN KEY_INPUT(i% XOR 128) = 0
+
+    '--- Set keys that have been pressed (Key Down event)
+    IF (i% AND 128) = 0 THEN KEY_INPUT(i%) = -1
+
+    '--- Clear input buffer for a clean read next time
+    WHILE INKEY$ <> "": WEND
+END SUB
 
 '--------------------------------------------------------------------------
 ' Clears the screen, displays a message, and terminates the program.
@@ -1377,15 +1466,4 @@ SUB DebugSpriteCoords (spriteIndex, msg$)
         PRINT " v.c:" + STR$(sprite.velocity.col);
         PRINT " ";
     END IF
-END SUB
-
-SUB GetKeyInput
-    KEY_INPUT_MAX = 0
-    nextChar$ = INKEY$
-
-    WHILE nextChar$ <> ""
-        KEY_INPUT_MAX = KEY_INPUT_MAX + 1 '--- Note: KEY_INPUT(0) should stay empty, skip it when looping
-        KEY_INPUT(KEY_INPUT_MAX) = nextChar$
-        nextChar$ = INKEY$
-    WEND
 END SUB
