@@ -123,6 +123,24 @@ PLAYER(2).keyJump = 17 '--- W
 PLAYER(2).keySpikeball = 31 '---S
 PLAYER(2).maxJumpDistance = 9
 
+'--- TODO: Need to create interface to map store custom play inputs
+PLAYER(3).enabled = 1
+PLAYER(3).spriteColor = CLR_LT_CYAN
+PLAYER(3).keyLeft = 75 '--- Left arrow key
+PLAYER(3).keyRight = 77 '--- Right arrow key
+PLAYER(3).keyJump = 72 '--- Up arrow key
+PLAYER(3).keySpikeball = 80 '--- Down arrow key
+PLAYER(3).maxJumpDistance = 9
+
+PLAYER(4).enabled = 0
+PLAYER(4).spriteColor = CLR_LT_MAGENTA
+PLAYER(4).keyLeft = 30 '--- A
+PLAYER(4).keyRight = 32 '--- D
+PLAYER(4).keyJump = 17 '--- W
+PLAYER(4).keySpikeball = 31 '---S
+PLAYER(4).maxJumpDistance = 9
+
+
 '--------------------------------------------------------------------------
 ' Sprite Type Constants: Used to identify select Sprite structs.
 '--------------------------------------------------------------------------
@@ -453,12 +471,16 @@ SUB RunMainGameLoop
     WEND
 END SUB
 
+'--------------------------------------------------------------------------
+' Prints the status line at the bottom of the screen. Displays the
+' level title, and each player's remaining lives and scores.
+'--------------------------------------------------------------------------
 SUB RenderStatusLine
     PrintAt SCREEN_AREA.max.row, 1, 15, GAME_STATE.levelTitle
 
     FOR p = 1 TO PLAYER_MAX
         COLOR PLAYER(p).spriteColor
-        PRINT ": Lives =" + STR$(SPRITES(PLAYER(p).spriteIndex).lives) + "  Score =" + STR$(PLAYER(p).score);
+        PRINT "  ="; LTRIM$(STR$(SPRITES(PLAYER(p).spriteIndex).lives)) + " $"; LTRIM$(STR$(PLAYER(p).score));
     NEXT p
 
 END SUB
@@ -470,27 +492,36 @@ END SUB
 ' GAME_STATE.loadedLevel upon success.
 '--------------------------------------------------------------------------
 SUB LoadLevelData
-    ' Open level data file
+    '--- Open level data file
     file$ = ".\DATA\LEV_" + LTRIM$(STR$(GAME_STATE.nextLevel)) + ".DAT"
     OPEN file$ FOR INPUT AS #1
 
-    ' First line has the title of the level to be returned
+    '--- First line has the title of the level to be returned
     INPUT #1, GAME_STATE.levelTitle
     DisplayLevelTitle GAME_STATE.levelTitle
 
-    ' Read/render file data to the screen
+    '--- Read/render file data to the screen
     FOR row = GAME_AREA.min.row TO GAME_AREA.max.row
         INPUT #1, levelData$
         PrintAt row, 1, 7, levelData$
     NEXT row
 
-    ' Close the file handle
+    '--- Close the file handle
     CLOSE #1
 
     '--- Update/reset variables storing level-specific data
     GAME_STATE.loadedLevel = GAME_STATE.nextLevel
     SPRITE_COUNT = 0
     PLAYER_MAX = 0
+
+    '--- Clear all player key inputs from requiring key releases
+    FOR p = 1 TO PLAYER_MAX
+        KEY_NEEDS_RELEASE(PLAYER(p).keyLeft) = 0
+        KEY_NEEDS_RELEASE(PLAYER(p).keyRight) = 0
+        KEY_NEEDS_RELEASE(PLAYER(p).keyJump) = 0
+        KEY_NEEDS_RELEASE(PLAYER(p).keySpikeball) = 0
+    NEXT p
+
     ParseLevelData
 END SUB
 
@@ -794,7 +825,7 @@ SUB SpriteMovePlayerControlled (spriteIndex)
 
         '--- Only jump when on solid ground or slides
         IF collisionBelow = CHAR_COLLISION_SOLID OR collisionBelow = CHAR_COLLISION_PUSH_LEFT OR collisionBelow = CHAR_COLLISION_PUSH_RIGHT THEN
-            SPRITES(spriteIndex).velocity.row = SPRITES(index).gravity * GAME_STATE.gravity * -1
+            SPRITES(spriteIndex).velocity.row = SPRITES(spriteIndex).gravity * GAME_STATE.gravity * -1
             SPRITES(spriteIndex).gravityTimer = 16
         END IF
     END IF
