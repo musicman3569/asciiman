@@ -30,7 +30,7 @@ END TYPE
 DIM SHARED GAME_STATE AS GameState
 GAME_STATE.soundEnabled = 1
 GAME_STATE.loadedLevel = 0
-GAME_STATE.nextLevel = 7
+GAME_STATE.nextLevel = 1
 GAME_STATE.gravity = 1
 GAME_STATE.frameRate = 18
 GAME_STATE.playerCount = 2
@@ -805,10 +805,14 @@ SUB SpriteMovePlayerControlled (spriteIndex)
     '--- Player left/right movement
     IF CheckKeyInput(player.keyRight) THEN
         SPRITES(spriteIndex).velocity.col = 1
+        KEY_NEEDS_RELEASE(player.keyRight) = 1 '--- Skip movement next frame if holding
     ELSEIF CheckKeyInput(player.keyLeft) THEN
         SPRITES(spriteIndex).velocity.col = -1
+        KEY_NEEDS_RELEASE(player.keyLeft) = 1 '--- Skip movement next frame if holding
     ELSE
         SPRITES(spriteIndex).velocity.col = 0
+        KEY_NEEDS_RELEASE(player.keyLeft) = 0 '--- Allow movement again if holding
+        KEY_NEEDS_RELEASE(player.keyRight) = 0 '--- Allow movement again if holding
     END IF
 
     '--- Player jump
