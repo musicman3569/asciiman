@@ -204,6 +204,7 @@ TYPE Sprite
     moveTimer AS INTEGER '--- Number of game frames to disallow automatic or player controlled movement.
     friction AS INTEGER '--- Amount of velocity reduction to apply each frame when on a solid. Defaults to 1.
     playerIndex AS INTEGER '--- Index of the PLAYER() that controls the sprite. 0 = not player controlled (default).
+    playerPoints AS INTEGER '--- Number of points to award a player if on death of this sprite
 END TYPE
 
 DIM SHARED SPRITES(200) AS Sprite '--- Array to store all active game sprites
@@ -265,6 +266,7 @@ SPRITE_TYPES(SPRITE_TYPE_ENEMY1).frameRate = 5
 SPRITE_TYPES(SPRITE_TYPE_ENEMY1).charColor = CLR_GREEN
 SPRITE_TYPES(SPRITE_TYPE_ENEMY1).gravity = 1
 SPRITE_TYPES(SPRITE_TYPE_ENEMY1).gravityTimer = 0
+SPRITE_TYPES(SPRITE_TYPE_ENEMY1).playerPoints = 50
 '--- Fire Sprite template
 SPRITE_TYPES(SPRITE_TYPE_FIRE).spriteType = SPRITE_TYPE_FIRE
 SPRITE_TYPES(SPRITE_TYPE_FIRE).moveType = SPRITE_MOVE_NONE
@@ -283,6 +285,7 @@ SPRITE_TYPES(SPRITE_TYPE_EXTRA_LIFE).frameRate = 0
 SPRITE_TYPES(SPRITE_TYPE_EXTRA_LIFE).charColor = CLR_LT_CYAN
 SPRITE_TYPES(SPRITE_TYPE_EXTRA_LIFE).gravity = 1
 SPRITE_TYPES(SPRITE_TYPE_EXTRA_LIFE).gravityTimer = 0
+SPRITE_TYPES(SPRITE_TYPE_EXTRA_LIFE).playerPoints = 200
 '--- Spike Sprite template
 SPRITE_TYPES(SPRITE_TYPE_SPIKE).spriteType = SPRITE_TYPE_SPIKE
 SPRITE_TYPES(SPRITE_TYPE_SPIKE).moveType = SPRITE_MOVE_NONE
@@ -319,6 +322,7 @@ SPRITE_TYPES(SPRITE_TYPE_NEXT_LEVEL).frameRate = 0
 SPRITE_TYPES(SPRITE_TYPE_NEXT_LEVEL).charColor = CLR_LT_MAGENTA
 SPRITE_TYPES(SPRITE_TYPE_NEXT_LEVEL).gravity = 0
 SPRITE_TYPES(SPRITE_TYPE_NEXT_LEVEL).gravityTimer = 0
+SPRITE_TYPES(SPRITE_TYPE_NEXT_LEVEL).playerPoints = 100
 
 '--------------------------------------------------------------------------
 ' Sprite collision mappings.
@@ -956,23 +960,24 @@ SUB CheckCollision (spriteIndex, row, col)
         CASE CHAR_COLLISION_SOLID
             SpriteBlockMove spriteIndex, row, col
         CASE CHAR_COLLISION_DEATH
-            SpriteDeath spriteIndex
+            SpriteDeath spriteIndex, targetSpriteIndex
         CASE CHAR_COLLISION_ENEMY_DEATH
-            SpriteDeath targetSpriteIndex
+            SpriteDeath targetSpriteIndex, spriteIndex
             SpriteAllowMove spriteIndex, row, col
         CASE CHAR_COLLISION_EXTRA_LIFE
             IF targetSprite.spriteType = SPRITE_TYPE_EXTRA_LIFE THEN
-                SpriteDeath targetSpriteIndex
+                SpriteDeath targetSpriteIndex, spriteIndex
                 SpriteExtraLife spriteIndex
             END IF
             IF sprite.spriteType = SPRITE_TYPE_EXTRA_LIFE THEN
-                SpriteDeath spriteIndex
+                SpriteDeath spriteIndex, targetSpriteIndex
                 SpriteExtraLife targetSpriteIndex
             ELSE
                 SpriteAllowMove spriteIndex, row, col
             END IF
         CASE CHAR_COLLISION_NEXT_LEVEL
             GAME_STATE.nextLevel = GAME_STATE.nextLevel + 1
+            SpriteDeath targetSpriteIndex, spriteIndex
             SpriteAllowMove spriteIndex, row, col
         CASE CHAR_COLLISION_PUSH_LEFT
             SpriteChangeMoveTarget spriteIndex, row, col - 1
@@ -980,13 +985,13 @@ SUB CheckCollision (spriteIndex, row, col)
             SpriteChangeMoveTarget spriteIndex, row, col + 1
         CASE CHAR_COLLISION_VERTICAL_DEATH
             IF sprite.position.row <> row THEN
-                SpriteDeath spriteIndex
+                SpriteDeath spriteIndex, targetSpriteIndex
             ELSE
                 SpriteBlockMove spriteIndex, row, col
             END IF
         CASE CHAR_COLLISION_VERTICAL_ENEMY_DEATH
             IF sprite.position.row <> row THEN
-                SpriteDeath targetSpriteIndex
+                SpriteDeath targetSpriteIndex, spriteIndex
                 SpriteAllowMove spriteIndex, row, col
             ELSE
                 SpriteBlockMove spriteIndex, row, col
@@ -1015,7 +1020,7 @@ SUB CheckSpecialCollisions
                     '--- If a sprite is found and a spikeball collision kills it, then kill it
                     IF targetIndex <> NULL_INDEX THEN
                         IF COLLISIONS(sprite.spriteType, SPRITES(targetIndex).spriteType) = CHAR_COLLISION_ENEMY_DEATH THEN
-                            SpriteDeath targetIndex
+                            SpriteDeath targetIndex, index
                         END IF
                     END IF
                 NEXT colOffset
@@ -1127,12 +1132,18 @@ END SUB
 '
 ' @param spriteIndex Index of the Sprite that should lose a life.
 '--------------------------------------------------------------------------
-SUB SpriteDeath (spriteIndex)
+SUB SpriteDeath (spriteIndex, causedByIndex)
     SPRITES(spriteIndex).lives = SPRITES(spriteIndex).lives - 1
     DIM sprite AS Sprite: sprite = SPRITES(spriteIndex)
+    DIM causedBySprite AS Sprite: causedBySprite = SPRITES(causedByIndex)
 
     replacementChar$ = " " '--- Default replacement char (empty space)
     replacementColor = CLR_BLACK '--- Default replacement color
+
+    '--- Award player points if they caused the death of this sprite
+    IF causedBySprite.playerIndex THEN
+        PLAYER(causedBySprite.playerIndex).score = PLAYER(causedBySprite.playerIndex).score + sprite.playerPoints
+    END IF
 
     SELECT CASE sprite.spriteType
         CASE SPRITE_TYPE_PLAYER, SPRITE_TYPE_PLAYER_SPIKEBALL, SPRITE_TYPE_PLAYER_DRAINED
@@ -1156,9 +1167,6 @@ SUB SpriteDeath (spriteIndex)
             IF GAME_STATE.soundEnabled THEN SOUND 80, 2
             replacementColor = CLR_GREEN
             replacementChar$ = DEAD_SPLAT$
-            PLAYER(PLAYER_MAX).score = PLAYER(PLAYER_MAX).score + 50
-        CASE SPRITE_TYPE_EXTRA_LIFE
-            PLAYER(PLAYER_MAX).score = PLAYER(PLAYER_MAX).score + 200
     END SELECT
 
     '--- Disable the Sprite if it is out of lives
