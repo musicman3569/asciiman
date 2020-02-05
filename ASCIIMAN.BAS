@@ -10,6 +10,46 @@ TYPE Rectangle
     max AS Coord
 END TYPE
 
+'--------------------------------------------------------------------------
+' The KeyMap TYPE stores keyboard/controller button mappings for each player.
+'--------------------------------------------------------------------------
+TYPE KeyMap
+    playerIndex AS INTEGER '--- Index of the PLAYER() the KeyMap is bound to.
+    deviceIndex AS INTEGER '--- Device number the KeyMap is bound to.
+    inputType AS INTEGER '--- One of the INPUT_TYPE_{...} values.  Defines the input type on the input device (e.g. button/axis)
+    inputAction AS STRING '--- One of the INPUT_ACTION_{...} values. Determines the action the input triggers.
+    inputIndex AS SINGLE '--- Button/axis index on the device
+    axisMin AS SINGLE '--- Minimum value the axis must return to trigger action.
+    axisMax AS SINGLE '--- Maximum value the axis must return to trigger action.
+    value AS SINGLE '--- Current raw value of the input. Used to determine if the inputAction should be triggered.
+    inputName AS STRING '--- On-screen display name of the input.
+    needsRelease AS INTEGER '--- 1 = Require a release event before the action can be triggered again, 0 = action may be triggered
+END TYPE
+
+'--- Initialize global key map array that will store all button mappings
+DIM SHARED KEY_MAP(1 TO 64) AS KeyMap
+DIM SHARED KEY_MAPS: KEY_MAPS = 0 '--- Increments as key mappings are added to track the max KEY_MAP index to use
+
+'--------------------------------------------------------------------------
+' Input Types are used to identify the what type of input a KeyMap is for.
+' This allows different methods to be called for checking/handling the values
+' since different inputs have different ranges.
+'--------------------------------------------------------------------------
+DIM SHARED INPUT_TYPE_UNASSIGNED: INPUT_TYPE_UNASSIGNED = 0
+DIM SHARED INPUT_TYPE_BUTTON: INPUT_TYPE_BUTTON = 1
+DIM SHARED INPUT_TYPE_AXIS: INPUT_TYPE_AXIS = 2
+DIM SHARED INPUT_TYPE_WHEEL: INPUT_TYPE_WHEEL = 3
+
+'--------------------------------------------------------------------------
+' Input Actions are used to indicate what action a KeyMap should perform
+' on the Player's sprite when it is triggering an event.
+'--------------------------------------------------------------------------
+DIM SHARED INPUT_ACTION_NONE AS STRING: INPUT_ACTION_NONE = ""
+DIM SHARED INPUT_ACTION_LEFT AS STRING: INPUT_ACTION_LEFT = "Move Left"
+DIM SHARED INPUT_ACTION_RIGHT AS STRING: INPUT_ACTION_RIGHT = "Move Right"
+DIM SHARED INPUT_ACTION_JUMP AS STRING: INPUT_ACTION_JUMP = "Jump"
+DIM SHARED INPUT_ACTION_SPIKEBALL AS STRING: INPUT_ACTION_SPIKEBALL = "Spikeball Attack"
+
 '--- Useful when array searching to indicate no index was found.
 DIM SHARED NULL_INDEX: NULL_INDEX = -1
 
@@ -33,7 +73,7 @@ GAME_STATE.loadedLevel = 0
 GAME_STATE.nextLevel = 1
 GAME_STATE.gravity = 1
 GAME_STATE.frameRate = 18
-GAME_STATE.playerCount = 2
+GAME_STATE.playerCount = 0
 
 '--------------------------------------------------------------------------
 ' Debugging variables for tracking information, changing values has no functional impact.
@@ -41,12 +81,6 @@ GAME_STATE.playerCount = 2
 DIM SHARED DEBUG_ON: DEBUG_ON = 1 '--- 1 = Display messages from as Debug...() SUBs, 0 = Hide messages
 DIM SHARED DEBUG_SPRITE_INDEX: DEBUG_SPRITE_INDEX = NULL_INDEX '--- For tracking sprite index values
 DIM SHARED DEBUG_CALLER AS STRING: DEBUG_CALLER = "NONE" '--- For tracking calling SUBs (stack tracing)
-
-'--------------------------------------------------------------------------
-' Used to store all chars from the keyboard input buffer each frame
-'--------------------------------------------------------------------------
-DIM SHARED KEY_INPUT(0 TO 127)
-DIM SHARED KEY_NEEDS_RELEASE(0 TO 127) '--- Flag indicating that a key needs to be released before its input can be used again.
 
 '--------------------------------------------------------------------------
 ' Dimensions of the screen
@@ -96,50 +130,25 @@ TYPE Player
     startRow AS INTEGER '--- Stores the spawn row position of the player
     startCol AS INTEGER '--- Stores the spawn col position of the player
     score AS INTEGER '--- Total score the player has earned.
-    keyLeft AS INTEGER '--- Key binding to move left (ASCII char code)
-    keyRight AS INTEGER '--- Key binding to move right (ASCII char code)
-    keyJump AS INTEGER '--- Key binding to jump (ASCII char code)
-    keySpikeball AS INTEGER '--- Key binding to perform Spikeball attack (ASCII char code)
     maxJumpDistance AS INTEGER '--- Max number of cols a player can jump
     jumpDistance AS INTEGER '--- Stores the remaining number of jump cols during jumps
+    deviceIndex AS INTEGER '--- Input device index number for the player's controller (or other input device)
 END TYPE
 
-DIM SHARED PLAYER(5) AS Player '--- Stores the index values of the player sprites in the SPRITES() array.
+DIM SHARED PLAYER(1 TO 4) AS Player '--- Stores the index values of the player sprites in the SPRITES() array.
 DIM SHARED PLAYER_MAX: PLAYER_MAX = 0 '--- Number of active players in the game
 
-PLAYER(1).enabled = 1
 PLAYER(1).spriteColor = CLR_YELLOW
-PLAYER(1).keyLeft = 75 '--- Left arrow key
-PLAYER(1).keyRight = 77 '--- Right arrow key
-PLAYER(1).keyJump = 72 '--- Up arrow key
-PLAYER(1).keySpikeball = 80 '--- Down arrow key
 PLAYER(1).maxJumpDistance = 9
 
-PLAYER(2).enabled = 0
 PLAYER(2).spriteColor = CLR_LT_BLUE
-PLAYER(2).keyLeft = 30 '--- A
-PLAYER(2).keyRight = 32 '--- D
-PLAYER(2).keyJump = 17 '--- W
-PLAYER(2).keySpikeball = 31 '---S
 PLAYER(2).maxJumpDistance = 9
 
-'--- TODO: Need to create interface to map store custom play inputs
-PLAYER(3).enabled = 1
 PLAYER(3).spriteColor = CLR_LT_CYAN
-PLAYER(3).keyLeft = 75 '--- Left arrow key
-PLAYER(3).keyRight = 77 '--- Right arrow key
-PLAYER(3).keyJump = 72 '--- Up arrow key
-PLAYER(3).keySpikeball = 80 '--- Down arrow key
 PLAYER(3).maxJumpDistance = 9
 
-PLAYER(4).enabled = 0
 PLAYER(4).spriteColor = CLR_LT_MAGENTA
-PLAYER(4).keyLeft = 30 '--- A
-PLAYER(4).keyRight = 32 '--- D
-PLAYER(4).keyJump = 17 '--- W
-PLAYER(4).keySpikeball = 31 '---S
 PLAYER(4).maxJumpDistance = 9
-
 
 '--------------------------------------------------------------------------
 ' Sprite Type Constants: Used to identify select Sprite structs.
@@ -433,6 +442,7 @@ ON KEY(10) ExitGame
 ' Start Program Execution
 '--------------------------------------------------------------------------
 SetDisplayMode
+WaitForPlayersToJoin
 
 WHILE GAME_STATE.nextLevel > 0 AND GAME_STATE.nextLevel < 10
     LoadLevelData
@@ -457,6 +467,133 @@ SUB ToggleSound
 END SUB
 
 '--------------------------------------------------------------------------
+' Displays a waiting screen where players press a button on their input
+' device to join the game. As players join, the input device and key
+' mappings for the player's controls are displayed.
+'
+' After all players have joined, a continuation key is pressed to continue.
+'--------------------------------------------------------------------------
+SUB WaitForPlayersToJoin
+    CLS
+    PrintAt 2, 1, 10, "Waiting for players...Press any button to join.  Press Esc to start."
+    PRINT: PRINT
+
+    _KEYCLEAR
+    ClearInkey
+
+    DO
+        FOR deviceIndex = 1 TO _DEVICES
+            '--- Check if the device has any input events
+            IF _DEVICEINPUT(deviceIndex) THEN
+                deviceName$ = _DEVICE$(deviceIndex)
+
+                '--- Detect Button presses on any devices with buttons
+                IF INSTR(deviceName$, "[BUTTON]") > 0 THEN
+                    FOR btnIndex = 1 TO _LASTBUTTON(deviceIndex)
+                        IF _BUTTONCHANGE(btnIndex) = -1 THEN
+                            SetPlayerInputs deviceIndex
+                        END IF
+                    NEXT btnIndex
+                END IF
+            END IF
+        NEXT deviceIndex
+    LOOP UNTIL INKEY$ = CHR$(27) 'escape key exit
+END SUB
+
+'--------------------------------------------------------------------------
+' Add a new KeyMap to the KEY_MAP array and increment the KEY_MAPS counter.
+'
+' @param playerIndex Index of the PLAYER() the KeyMap is bound to.
+' @param deviceIndex Device number the KeyMap is bound to.
+' @param inputAction$ One of the INPUT_ACTION_{...} values. Determines the action the input triggers.
+' @param inputType One of the INPUT_TYPE_{...} values.  Defines the input type on the input device (e.g. button/axis)
+' @param inputIndex Button/axis index on the device
+' @param axisMin! Minimum value the axis must return to trigger action.
+' @param axisMax! Maximum value the axis must return to trigger action.
+' @param inputName$ On-screen display name of the input.
+'--------------------------------------------------------------------------
+SUB AddKeyMap (playerIndex, deviceIndex, inputAction$, inputType, inputIndex, axisMin!, axisMax!, inputName$)
+    KEY_MAPS = KEY_MAPS + 1
+    KEY_MAP(KEY_MAPS).playerIndex = playerIndex
+    KEY_MAP(KEY_MAPS).deviceIndex = deviceIndex
+    KEY_MAP(KEY_MAPS).inputAction = inputAction$
+    KEY_MAP(KEY_MAPS).inputType = inputType
+    KEY_MAP(KEY_MAPS).inputIndex = inputIndex
+    KEY_MAP(KEY_MAPS).axisMax = axisMax!
+    KEY_MAP(KEY_MAPS).axisMin = axisMin!
+    KEY_MAP(KEY_MAPS).inputName = inputName$
+END SUB
+
+'--------------------------------------------------------------------------
+' Adds a new player and their input device and automatically configures
+' the control mappings based on the type of device detected.  Renders
+' the final mappings on-screen. Also prevents the deviceIndex from being
+' mapped to more than one player at a time by performing no action if the
+' deviceIndex is already in use.
+'
+' @param deviceIndex Device number (see _DEVICEINPUT) to map to the
+'--------------------------------------------------------------------------
+SUB SetPlayerInputs (deviceIndex)
+    '--- Don't assign controller if it is already assigned to another player
+    FOR p = 1 TO GAME_STATE.playerCount
+        IF PLAYER(p).deviceIndex = deviceIndex THEN EXIT SUB
+    NEXT p
+
+    '--- The controller is available, add a new player
+    GAME_STATE.playerCount = GAME_STATE.playerCount + 1
+    playerIndex = GAME_STATE.playerCount
+    PLAYER(playerIndex).deviceIndex = deviceIndex
+
+    '--- Keep track of the starting KeyMap index so all new KeyMaps
+    '--- can be displayed after all the buttons/axis are mapped.
+    startingKeyMap = KEY_MAPS + 1
+    deviceName$ = GetDeviceName$(deviceIndex)
+
+    '--- Auto-configure the input device button mappings by the detected device name
+    SELECT CASE deviceName$
+        CASE "Controller (XBOX 360 For Windows)", "Controller (Xbox One For Windows)"
+            AddKeyMap playerIndex, deviceIndex, INPUT_ACTION_LEFT, INPUT_TYPE_AXIS, 1, -1, -0.7, "Joystick Left"
+            AddKeyMap playerIndex, deviceIndex, INPUT_ACTION_RIGHT, INPUT_TYPE_AXIS, 1, 0.7, 1, "Joystick Right"
+            AddKeyMap playerIndex, deviceIndex, INPUT_ACTION_JUMP, INPUT_TYPE_BUTTON, 1, -1, -1, "A Button"
+            AddKeyMap playerIndex, deviceIndex, INPUT_ACTION_SPIKEBALL, INPUT_TYPE_BUTTON, 3, -1, -1, "X Button"
+        CASE "USB Gamepad "
+            AddKeyMap playerIndex, deviceIndex, INPUT_ACTION_LEFT, INPUT_TYPE_AXIS, 1, -1, -0.7, "D-Pad Left"
+            AddKeyMap playerIndex, deviceIndex, INPUT_ACTION_RIGHT, INPUT_TYPE_AXIS, 1, 0.7, 1, "D-Pad Right"
+            AddKeyMap playerIndex, deviceIndex, INPUT_ACTION_JUMP, INPUT_TYPE_BUTTON, 3, -1, -1, "B Button"
+            AddKeyMap playerIndex, deviceIndex, INPUT_ACTION_SPIKEBALL, INPUT_TYPE_BUTTON, 1, -1, -1, "Y Button"
+        CASE "KEYBOARD"
+            AddKeyMap playerIndex, deviceIndex, INPUT_ACTION_LEFT, INPUT_TYPE_BUTTON, 332, -1, -1, "Left Arrow Key"
+            AddKeyMap playerIndex, deviceIndex, INPUT_ACTION_RIGHT, INPUT_TYPE_BUTTON, 334, -1, -1, "Right Arrow Key"
+            AddKeyMap playerIndex, deviceIndex, INPUT_ACTION_JUMP, INPUT_TYPE_BUTTON, 329, -1, -1, "Up Arrow Key"
+            AddKeyMap playerIndex, deviceIndex, INPUT_ACTION_SPIKEBALL, INPUT_TYPE_BUTTON, 337, -1, -1, "Down Arrow Key"
+    END SELECT
+
+    '--- Display the newly added player and key mappings
+    COLOR PLAYER(playerIndex).spriteColor
+    PRINT " PLAYER"; STR$(playerIndex); ": "; deviceName$; " #"; LTRIM$(STR$(deviceIndex))
+    FOR k = startingKeyMap TO KEY_MAPS
+        PRINT KEY_MAP(k).inputAction; ": "; KEY_MAP(k).inputName
+    NEXT k
+    PRINT
+END SUB
+
+'--------------------------------------------------------------------------
+' Extracts the user-friendly display name of an input device. See _DEVICE$()
+' for details on the source string from which this extracts the name.
+'
+' @param deviceIndex Device number from _DEVICEINPUT to return the name for.
+'--------------------------------------------------------------------------
+FUNCTION GetDeviceName$ (deviceIndex)
+    GetDeviceName$ = _DEVICE$(deviceIndex)
+    GetDeviceName$ = Replace$(GetDeviceName$, "[CONTROLLER]", "")
+    GetDeviceName$ = Replace$(GetDeviceName$, "[NAME]", "")
+    GetDeviceName$ = Replace$(GetDeviceName$, "[BUTTON]", "")
+    GetDeviceName$ = Replace$(GetDeviceName$, "[AXIS]", "")
+    GetDeviceName$ = Replace$(GetDeviceName$, "[", "")
+    GetDeviceName$ = Replace$(GetDeviceName$, "]", "")
+END FUNCTION
+
+'--------------------------------------------------------------------------
 ' Run the main game loop for the currently loaded level. LoadLevelData
 ' must be called before this.
 '
@@ -471,6 +608,7 @@ SUB RunMainGameLoop
         RenderStatusLine
         _LIMIT GAME_STATE.frameRate
         CheckSpecialCollisions
+        GetKeyInput
         MoveSprites
     WEND
 END SUB
@@ -519,12 +657,9 @@ SUB LoadLevelData
     PLAYER_MAX = 0
 
     '--- Clear all player key inputs from requiring key releases
-    FOR p = 1 TO PLAYER_MAX
-        KEY_NEEDS_RELEASE(PLAYER(p).keyLeft) = 0
-        KEY_NEEDS_RELEASE(PLAYER(p).keyRight) = 0
-        KEY_NEEDS_RELEASE(PLAYER(p).keyJump) = 0
-        KEY_NEEDS_RELEASE(PLAYER(p).keySpikeball) = 0
-    NEXT p
+    FOR k = 1 TO KEY_MAPS
+        KEY_MAP(k).needsRelease = 0
+    NEXT k
 
     ParseLevelData
 END SUB
@@ -680,8 +815,6 @@ END SUB
 ' Gets called by game loop once per frame.
 '--------------------------------------------------------------------------
 SUB MoveSprites
-    GetKeyInput
-
     FOR index = 0 TO SPRITE_COUNT - 1
         '--- Only move sprite if it is alive and in a valid game area position
         IF SpriteIsActive(SPRITES(index)) THEN
@@ -802,61 +935,74 @@ END SUB
 ' @param spriteIndex SPRITES() array index of the player-controlled Sprite.
 '--------------------------------------------------------------------------
 SUB SpriteMovePlayerControlled (spriteIndex)
+    DIM keyMap AS KeyMap
     DIM player AS Player
-    playerIndex = SPRITES(spriteIndex).playerIndex
-    player = PLAYER(playerIndex)
 
-    '--- Player left/right movement
-    IF CheckKeyInput(player.keyRight) THEN
-        SPRITES(spriteIndex).velocity.col = 1
-        KEY_NEEDS_RELEASE(player.keyRight) = 1 '--- Skip movement next frame if holding
-    ELSEIF CheckKeyInput(player.keyLeft) THEN
-        SPRITES(spriteIndex).velocity.col = -1
-        KEY_NEEDS_RELEASE(player.keyLeft) = 1 '--- Skip movement next frame if holding
-    ELSE
-        SPRITES(spriteIndex).velocity.col = 0
-        KEY_NEEDS_RELEASE(player.keyLeft) = 0 '--- Allow movement again if holding
-        KEY_NEEDS_RELEASE(player.keyRight) = 0 '--- Allow movement again if holding
-    END IF
+    SPRITES(spriteIndex).velocity.col = 0
 
-    '--- Player jump
-    IF CheckKeyInput(player.keyJump) THEN
-        '--- Require jump key to be released before jumping again
-        KEY_NEEDS_RELEASE(player.keyJump) = 1
+    FOR k = 1 TO KEY_MAPS
+        keyMap = KEY_MAP(k)
+        playerIndex = keyMap.playerIndex
+        player = PLAYER(playerIndex)
 
-        PLAYER(playerIndex).jumpDistance = player.maxJumpDistance
+        IF spriteIndex = player.spriteIndex THEN
+            IF CheckKeyInput(keyMap) THEN
+                SELECT CASE keyMap.inputAction
+                    CASE INPUT_ACTION_LEFT
+                        IF SPRITES(spriteIndex).moveTimer = 0 THEN
+                            SPRITES(spriteIndex).moveTimer = 2
+                            SPRITES(spriteIndex).velocity.col = -1
+                        END IF
+                    CASE INPUT_ACTION_RIGHT
+                        IF SPRITES(spriteIndex).moveTimer = 0 THEN
+                            SPRITES(spriteIndex).moveTimer = 2
+                            SPRITES(spriteIndex).velocity.col = 1
+                        END IF
+                    CASE INPUT_ACTION_JUMP
+                        '--- Require jump key to be released before jumping again
+                        KeyMapSetNeedsRelease 1, playerIndex, INPUT_ACTION_JUMP
+                        PLAYER(playerIndex).jumpDistance = player.maxJumpDistance
 
-        '--- Check what is gravitationally below the player
-        rowBelow = SPRITES(spriteIndex).position.row + SGN(GAME_STATE.gravity)
-        colBelow = SPRITES(spriteIndex).position.col
-        collisionBelow = GetCollisionType(spriteIndex, GetSpriteIndexAt(rowBelow, colBelow), CharAt$(rowBelow, colBelow))
+                        '--- Check what is gravitationally below the player
+                        rowBelow = SPRITES(spriteIndex).position.row + SGN(GAME_STATE.gravity)
+                        colBelow = SPRITES(spriteIndex).position.col
+                        collisionBelow = GetCollisionType(spriteIndex, GetSpriteIndexAt(rowBelow, colBelow), CharAt$(rowBelow, colBelow))
 
-        '--- Only jump when on solid ground or slides
-        IF collisionBelow = CHAR_COLLISION_SOLID OR collisionBelow = CHAR_COLLISION_PUSH_LEFT OR collisionBelow = CHAR_COLLISION_PUSH_RIGHT THEN
-            SPRITES(spriteIndex).velocity.row = SPRITES(spriteIndex).gravity * GAME_STATE.gravity * -1
-            SPRITES(spriteIndex).gravityTimer = 16
+                        '--- Only jump when on solid ground or slides
+                        IF collisionBelow = CHAR_COLLISION_SOLID OR collisionBelow = CHAR_COLLISION_PUSH_LEFT OR collisionBelow = CHAR_COLLISION_PUSH_RIGHT THEN
+                            SPRITES(spriteIndex).velocity.row = SPRITES(spriteIndex).gravity * GAME_STATE.gravity * -1
+                            SPRITES(spriteIndex).gravityTimer = 16
+                        END IF
+                    CASE INPUT_ACTION_SPIKEBALL
+                        IF SPRITES(spriteIndex).spriteType <> SPRITE_TYPE_PLAYER_DRAINED THEN
+                            KeyMapSetNeedsRelease 1, playerIndex, INPUT_ACTION_SPIKEBALL '--- Must release key before attacking again
+
+                            SPRITES(spriteIndex).nextSpriteType = SPRITE_TYPE_PLAYER_SPIKEBALL
+                            SPRITES(spriteIndex).nextSpriteTypeTimer = 0
+                            SPRITES(spriteIndex).velocity.col = 0
+                        END IF
+                END SELECT
+            END IF
         END IF
+    NEXT k
+
+    IF SPRITES(spriteIndex).moveTimer > 0 THEN
+        SPRITES(spriteIndex).moveTimer = SPRITES(spriteIndex).moveTimer - 1
     END IF
 
-
-    '--- Player spikeball attack
-    IF CheckKeyInput(player.keySpikeball) THEN
-        IF SPRITES(spriteIndex).spriteType <> SPRITE_TYPE_PLAYER_DRAINED THEN
-            KEY_NEEDS_RELEASE(player.keyLeft) = 1 '--- Spikeball interrupts left movement
-            KEY_NEEDS_RELEASE(player.keyRight) = 1 '--- Spikeball interrupts right movement
-            KEY_NEEDS_RELEASE(player.keySpikeball) = 1 '--- Must release key before attacking again
-
-            SPRITES(spriteIndex).nextSpriteType = SPRITE_TYPE_PLAYER_SPIKEBALL
-            SPRITES(spriteIndex).nextSpriteTypeTimer = 0
-            SPRITES(spriteIndex).velocity.col = 0
-        END IF
-    END IF
 
     '--- Escape
-    IF KEY_INPUT(27) THEN
-        GAME_STATE.nextLevel = 0
-    END IF
+    'IF KEY_INPUT(27) THEN
+    '    GAME_STATE.nextLevel = 0
+    'END IF
+END SUB
 
+SUB KeyMapSetNeedsRelease (needsRelease, playerIndex, inputAction$)
+    FOR k = 1 TO KEY_MAPS
+        IF KEY_MAP(k).playerIndex = playerIndex AND KEY_MAP(k).inputAction = inputAction$ THEN
+            KEY_MAP(k).needsRelease = needsRelease
+        END IF
+    NEXT k
 END SUB
 
 '--------------------------------------------------------------------------
@@ -1381,6 +1527,40 @@ SUB PrintAt (row, col, textColor, text$)
 END SUB
 
 '--------------------------------------------------------------------------
+' Replaces all instances of the [Find] sub-string with the [Add] sub-string
+' within the [Text] string.
+'
+' @param Text The input string; the text that's being manipulated.
+' @param Find The specified sub-string; the string sought within the [Text] string.
+' @param Add The sub-string that's being added to the [Text] string.
+'--------------------------------------------------------------------------
+FUNCTION Replace$ (Text AS STRING, Find AS STRING, Add AS STRING)
+    DIM lngLocation AS LONG 'The address of the [Find] substring within the [Text] string.
+    DIM strBefore AS STRING 'The characters before the string to be replaced.
+    DIM strAfter AS STRING 'The characters after the string to be replaced.
+
+    '--- INITIALIZE:
+    lngLocation = INSTR(1, Text, Find)
+
+    '--- PROCESSING:
+    '--- While [Find] appears in [Text]...
+    WHILE lngLocation
+        'Extract all text before the [Find] substring:
+        strBefore = LEFT$(Text, lngLocation - 1)
+        'Extract all text after the [Find] substring:
+        strAfter = RIGHT$(Text, ((LEN(Text) - (lngLocation + LEN(Find) - 1))))
+        'Return the substring:
+        Text = strBefore + Add + strAfter
+        'Locate the next instance of [Find]:
+        lngLocation = INSTR(1, Text, Find)
+        'Next instance of [Find]...
+    WEND
+
+    '--- OUTPUT:
+    Replace$ = Text
+END FUNCTION
+
+'--------------------------------------------------------------------------
 ' Reads a character from the screen at the specified position.
 '
 ' @param row% Screen row to read.
@@ -1399,54 +1579,78 @@ FUNCTION GetMin (valueA, valueB)
 END FUNCTION
 
 '--------------------------------------------------------------------------
-' Checks to see if a character code is currently being pressed
+' Checks to see if a KeyMap's value indicates it is currently being pressed
 ' and hasn't been set to require release before receiving input again.
-' To require a key to be released, set KEY_NEEDS_RELEASE(charCode) to 1
+' To require a key to be released, call SUB KeyMapSetNeedsRelease
 ' anywhere in the game loop.
 '
-' @param charCode ASCII character code of the key to check for input.
+' @param keyMap KeyMap instance to check for input events.
 '--------------------------------------------------------------------------
-FUNCTION CheckKeyInput (charCode)
-    IF KEY_INPUT(charCode) THEN
-        IF KEY_NEEDS_RELEASE(charCode) THEN
-            CheckKeyInput = 0
-        ELSE
+FUNCTION CheckKeyInput (keyMap AS KeyMap)
+    CheckKeyInput = 0
+
+    IF keyMap.needsRelease = 0 THEN
+        IF keyMap.value >= keyMap.axisMin AND keyMap.value <= keyMap.axisMax THEN
             CheckKeyInput = 1
         END IF
-    ELSE
-        KEY_NEEDS_RELEASE(charCode) = 0
-        CheckKeyInput = 0
     END IF
 END FUNCTION
 
 '--------------------------------------------------------------------------
-' Reads keyboard input directly from the hardware buffers and stores
-' all currently pressed character codes in the KEY_INPUT() array,
-' where the index is character code. Unpressed KEY_INPUTs will equal 0.
+' Reads input events from keyboards and game controllers and updates
+' the values in the KEY_MAP array with the results.
 '
-' Instead of reading from KEY_INPUT to check the result of this SUB
-' and see if a key is pressed, use the FUNCTION CheckKeyInput(charCode),
+' NOTE: Instead of checking KeyMap values directly for button/axis
+' input events, use the FUNCTION CheckKeyInput(keyMap)
 ' which also verifies a key release is not required first.
 '--------------------------------------------------------------------------
 SUB GetKeyInput
-    '--- Read keyboard input directly from hardware register
-    i% = INP(&H60)
+    '--- Check for the first device with an input event
+    deviceIndex = _DEVICEINPUT
 
-    '--- Clear all previous values if none are pressed
-    IF i% = 170 OR i% = 54 OR i% = 42 THEN
-        FOR a = 0 TO 127
-            KEY_INPUT(a) = 0
-        NEXT a
-    END IF
+    WHILE deviceIndex
+        '--- Check all buttons on the device for events
+        FOR b = 1 TO _LASTBUTTON(deviceIndex)
+            buttonChange! = _BUTTONCHANGE(b)
+            IF buttonChange! <> 0 THEN
+                SetKeyInput deviceIndex, INPUT_TYPE_BUTTON, b, buttonChange!
+            END IF
+        NEXT
 
-    '--- Clear keys that have been released (Key Up event = 128)
-    IF (i% AND 128) THEN KEY_INPUT(i% XOR 128) = 0
+        '--- Update all axis on the device with the current readings
+        FOR a = 1 TO _LASTAXIS(deviceIndex)
+            SetKeyInput deviceIndex, INPUT_TYPE_AXIS, a, _AXIS(a)
+        NEXT
 
-    '--- Set keys that have been pressed (Key Down event)
-    IF (i% AND 128) = 0 THEN KEY_INPUT(i%) = -1
+        '--- Get the next device with an input event
+        deviceIndex = _DEVICEINPUT
+    WEND
+END SUB
 
-    '--- Clear input buffer for a clean read next time
-    WHILE INKEY$ <> "": WEND
+'--------------------------------------------------------------------------
+' Updates the KEY_MAP array with a new value, and clears the needsRelease
+' field if the new value indicates the input event has stopped. Should be
+' called when new input events are detected.
+'
+' @param deviceIndex Device number read from _DEVICEINPUT that has the new value.
+' @param inputType One of INPUT_TYPE_{...} constants that the new value is for.
+' @param inputIndex Button or Axis index on the device that the new value is for.
+' @param value! New KeyMap input value to store.
+'--------------------------------------------------------------------------
+SUB SetKeyInput (deviceIndex, inputType, inputIndex, value!)
+    '--- Check each player's inputs for events
+    FOR k = 1 TO KEY_MAPS
+        IF KEY_MAP(k).deviceIndex = deviceIndex AND KEY_MAP(k).inputType = inputType AND KEY_MAP(k).inputIndex = inputIndex THEN
+            KEY_MAP(k).value = value!
+
+            '--- Clear the "need release" setting when the input value falls out of range
+            IF KEY_MAP(k).needsRelease THEN
+                IF KEY_MAP(k).value < KEY_MAP(k).axisMin OR KEY_MAP(k).value > KEY_MAP(k).axisMax THEN
+                    KEY_MAP(k).needsRelease = 0
+                END IF
+            END IF
+        END IF
+    NEXT k
 END SUB
 
 '--------------------------------------------------------------------------
