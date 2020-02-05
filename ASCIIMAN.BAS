@@ -442,6 +442,7 @@ ON KEY(10) ExitGame
 ' Start Program Execution
 '--------------------------------------------------------------------------
 SetDisplayMode
+IntroVid
 WaitForPlayersToJoin
 
 WHILE GAME_STATE.nextLevel > 0 AND GAME_STATE.nextLevel < 10
@@ -481,6 +482,7 @@ SUB WaitForPlayersToJoin
     _KEYCLEAR
     ClearInkey
 
+    '--- Wait for player input until Esc is pressed and there is at least 1 player
     DO
         FOR deviceIndex = 1 TO _DEVICES
             '--- Check if the device has any input events
@@ -490,14 +492,15 @@ SUB WaitForPlayersToJoin
                 '--- Detect Button presses on any devices with buttons
                 IF INSTR(deviceName$, "[BUTTON]") > 0 AND INSTR(deviceName$, "[MOUSE]") = 0 THEN
                     FOR btnIndex = 1 TO _LASTBUTTON(deviceIndex)
-                        IF _BUTTONCHANGE(btnIndex) = -1 AND btnIndex <> 2 THEN ' btnIndex 2 is Escape, so don't detect it
+                        '--- Detect any button other than Escape (btnIndex 2) as a player joining
+                        IF _BUTTONCHANGE(btnIndex) = -1 AND btnIndex <> 2 THEN
                             SetPlayerInputs deviceIndex
                         END IF
                     NEXT btnIndex
                 END IF
             END IF
         NEXT deviceIndex
-    LOOP UNTIL INKEY$ = CHR$(27) 'escape key exit
+    LOOP UNTIL INKEY$ = CHR$(27) AND GAME_STATE.playerCount > 0
 END SUB
 
 '--------------------------------------------------------------------------
@@ -1484,6 +1487,65 @@ FUNCTION GetSpriteType (char$)
     END IF
 END FUNCTION
 
+SUB IntroVid
+    CLS
+    m$ = "ASCII-MAN  "
+    ClearInkey
+    FOR col = 1 TO LEN(m$)
+        char$ = RIGHT$(LEFT$(m$, col), 1)
+        FOR row = 1 TO 14
+            IF char$ <> "" THEN COLOR 10 ELSE COLOR 14
+            IF row > 1 THEN LOCATE row - 1, col + 30: PRINT " ";
+            LOCATE row, col + 30: PRINT char$;
+            _LIMIT 36
+            IF INKEY$ <> "" THEN EXIT SUB
+        NEXT row
+    NEXT col
+
+    COLOR 9
+    FOR col = 1 TO 80
+        LOCATE 20, col: PRINT "Ф";
+        _LIMIT 180
+        IF INKEY$ <> "" THEN EXIT SUB
+    NEXT col
+    FOR col = 1 TO 80
+        LOCATE 10, col: PRINT "Ф";
+        _LIMIT 180
+        IF INKEY$ <> "" THEN EXIT SUB
+    NEXT col
+
+    COLOR 14
+    FOR col = 42 TO 80
+        LOCATE 14, col - 1: PRINT " ";
+        LOCATE 14, col: PRINT "";
+        _LIMIT 18
+        IF INKEY$ <> "" THEN EXIT SUB
+    NEXT col
+    LOCATE 14, 80: PRINT " ";
+
+    FOR i = 1 TO 270
+        r = INT(RND * 6) + 1
+        c = INT(RND * 9) + 35
+        COLOR (INT(RND * 15) + 1)
+        LOCATE r, c: PRINT CHR$(INT(RND * 200) + 50);
+        _LIMIT 180
+        IF INKEY$ <> "" THEN EXIT SUB
+    NEXT i
+
+    COLOR 14
+    LOCATE 1, 35: PRINT "  млллм  ";
+    LOCATE 2, 35: PRINT "мллўлўллм";
+    LOCATE 3, 35: PRINT "ллллллллл";
+    LOCATE 4, 35: PRINT "лл ппп лл";
+    LOCATE 5, 35: PRINT "плл   ллп";
+    LOCATE 6, 35: PRINT "  плллп  ";
+
+    COLOR 15
+    LOCATE 28, 30: PRINT "Press Any Key To Begin";
+    Pause
+END SUB
+
+
 
 '==========================================================================
 '                     GENERIC UTILITY FUNCTIONS
@@ -1494,6 +1556,7 @@ END FUNCTION
 '--------------------------------------------------------------------------
 SUB ClearInkey
     WHILE INKEY$ <> "": WEND
+    WHILE _DEVICEINPUT: WEND
 END SUB
 
 '--------------------------------------------------------------------------
