@@ -1487,10 +1487,16 @@ FUNCTION GetSpriteType (char$)
     END IF
 END FUNCTION
 
+'--------------------------------------------------------------------------
+' Plays the dumb little intro video when the game starts.  Can be bypassed
+' by pressing a key on the keyboard.
+'--------------------------------------------------------------------------
 SUB IntroVid
     CLS
     m$ = "ASCII-MAN  "
     ClearInkey
+
+    '--- Animate the letters dropping 1 at a time into the title
     FOR col = 1 TO LEN(m$)
         char$ = RIGHT$(LEFT$(m$, col), 1)
         FOR row = 1 TO 14
@@ -1502,6 +1508,7 @@ SUB IntroVid
         NEXT row
     NEXT col
 
+    '--- Animate drawing the horizontal bars
     COLOR 9
     FOR col = 1 TO 80
         LOCATE 20, col: PRINT "Ф";
@@ -1514,6 +1521,7 @@ SUB IntroVid
         IF INKEY$ <> "" THEN EXIT SUB
     NEXT col
 
+    '--- Animate ASCIIMAN running to the right
     COLOR 14
     FOR col = 42 TO 80
         LOCATE 14, col - 1: PRINT " ";
@@ -1523,6 +1531,7 @@ SUB IntroVid
     NEXT col
     LOCATE 14, 80: PRINT " ";
 
+    '--- Animate the random char/color distortion blob at the top
     FOR i = 1 TO 270
         r = INT(RND * 6) + 1
         c = INT(RND * 9) + 35
@@ -1532,6 +1541,7 @@ SUB IntroVid
         IF INKEY$ <> "" THEN EXIT SUB
     NEXT i
 
+    '--- Make a giant ASCIIMAN appear where the distortion blob was
     COLOR 14
     LOCATE 1, 35: PRINT "  млллм  ";
     LOCATE 2, 35: PRINT "мллўлўллм";
