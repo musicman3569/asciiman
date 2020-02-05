@@ -490,7 +490,7 @@ SUB WaitForPlayersToJoin
                 '--- Detect Button presses on any devices with buttons
                 IF INSTR(deviceName$, "[BUTTON]") > 0 AND INSTR(deviceName$, "[MOUSE]") = 0 THEN
                     FOR btnIndex = 1 TO _LASTBUTTON(deviceIndex)
-                        IF _BUTTONCHANGE(btnIndex) = -1 THEN
+                        IF _BUTTONCHANGE(btnIndex) = -1 AND btnIndex <> 2 THEN ' btnIndex 2 is Escape, so don't detect it
                             SetPlayerInputs deviceIndex
                         END IF
                     NEXT btnIndex
