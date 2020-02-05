@@ -488,7 +488,7 @@ SUB WaitForPlayersToJoin
                 deviceName$ = _DEVICE$(deviceIndex)
 
                 '--- Detect Button presses on any devices with buttons
-                IF INSTR(deviceName$, "[BUTTON]") > 0 THEN
+                IF INSTR(deviceName$, "[BUTTON]") > 0 AND INSTR(deviceName$, "[MOUSE]") = 0 THEN
                     FOR btnIndex = 1 TO _LASTBUTTON(deviceIndex)
                         IF _BUTTONCHANGE(btnIndex) = -1 THEN
                             SetPlayerInputs deviceIndex
