@@ -78,7 +78,7 @@ GAME_STATE.playerCount = 0
 '--------------------------------------------------------------------------
 ' Debugging variables for tracking information, changing values has no functional impact.
 '--------------------------------------------------------------------------
-DIM SHARED DEBUG_ON: DEBUG_ON = 1 '--- 1 = Display messages from as Debug...() SUBs, 0 = Hide messages
+DIM SHARED DEBUG_ON: DEBUG_ON = 0 '--- 1 = Display messages from as Debug...() SUBs, 0 = Hide messages
 DIM SHARED DEBUG_SPRITE_INDEX: DEBUG_SPRITE_INDEX = NULL_INDEX '--- For tracking sprite index values
 DIM SHARED DEBUG_CALLER AS STRING: DEBUG_CALLER = "NONE" '--- For tracking calling SUBs (stack tracing)
 
