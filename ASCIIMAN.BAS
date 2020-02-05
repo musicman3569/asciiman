@@ -434,9 +434,14 @@ END IF
 KEY(2) ON
 ON KEY(2) ToggleSound
 
-
 KEY(10) ON
 ON KEY(10) ExitGame
+
+KEY 15, CHR$(0) + CHR$(1)
+ON KEY(15) ExitGame
+KEY(15) ON
+
+
 
 '--------------------------------------------------------------------------
 ' Start Program Execution
@@ -448,6 +453,11 @@ WaitForPlayersToJoin
 WHILE GAME_STATE.nextLevel > 0 AND GAME_STATE.nextLevel < 10
     LoadLevelData
     RunMainGameLoop
+
+    IF GAME_STATE.nextLevel = 0 THEN
+        DeadVid
+        GAME_STATE.nextLevel = 1
+    END IF
 WEND
 
 SYSTEM
@@ -476,8 +486,9 @@ END SUB
 '--------------------------------------------------------------------------
 SUB WaitForPlayersToJoin
     CLS
-    PrintAt 2, 1, 10, "Waiting for players...Press any button to join.  Press Esc to start."
-    PRINT: PRINT
+    PrintAt 2, 1, 10, "Waiting for players...Press any button to join."
+    PrintAt 3, 1, 10, "Press Esc to quit."
+    COLOR
 
     _KEYCLEAR
     ClearInkey
@@ -492,15 +503,16 @@ SUB WaitForPlayersToJoin
                 '--- Detect Button presses on any devices with buttons
                 IF INSTR(deviceName$, "[BUTTON]") > 0 AND INSTR(deviceName$, "[MOUSE]") = 0 THEN
                     FOR btnIndex = 1 TO _LASTBUTTON(deviceIndex)
-                        '--- Detect any button other than Escape (btnIndex 2) as a player joining
-                        IF _BUTTONCHANGE(btnIndex) = -1 AND btnIndex <> 2 THEN
+                        '--- Detect any button other than SpaceBar (btnIndex 2) as a player joining
+                        IF _BUTTONCHANGE(btnIndex) = -1 AND btnIndex <> 58 THEN
+                            IF GAME_STATE.playerCount = 0 THEN PrintAt 3, 1, 10, "Press Space to start, or Esc to quit.": PRINT: PRINT
                             SetPlayerInputs deviceIndex
                         END IF
                     NEXT btnIndex
                 END IF
             END IF
         NEXT deviceIndex
-    LOOP UNTIL INKEY$ = CHR$(27) AND GAME_STATE.playerCount > 0
+    LOOP UNTIL INKEY$ = " " AND GAME_STATE.playerCount > 0
 END SUB
 
 '--------------------------------------------------------------------------
@@ -621,6 +633,7 @@ END SUB
 ' level title, and each player's remaining lives and scores.
 '--------------------------------------------------------------------------
 SUB RenderStatusLine
+    PrintAt SCREEN_AREA.max.row, 73, 7, "Esc=Quit"
     PrintAt SCREEN_AREA.max.row, 1, 15, GAME_STATE.levelTitle
 
     FOR p = 1 TO PLAYER_MAX
@@ -1503,7 +1516,7 @@ SUB IntroVid
             IF char$ <> "" THEN COLOR 10 ELSE COLOR 14
             IF row > 1 THEN LOCATE row - 1, col + 30: PRINT " ";
             LOCATE row, col + 30: PRINT char$;
-            _LIMIT 36
+            _LIMIT 50
             IF INKEY$ <> "" THEN EXIT SUB
         NEXT row
     NEXT col
@@ -1526,7 +1539,7 @@ SUB IntroVid
     FOR col = 42 TO 80
         LOCATE 14, col - 1: PRINT " ";
         LOCATE 14, col: PRINT "";
-        _LIMIT 18
+        _LIMIT 30
         IF INKEY$ <> "" THEN EXIT SUB
     NEXT col
     LOCATE 14, 80: PRINT " ";
@@ -1555,6 +1568,21 @@ SUB IntroVid
     Pause
 END SUB
 
+SUB DeadVid
+    CLS
+    COLOR CLR_LT_RED
+    m$ = "Game Over"
+    FOR col = 1 TO LEN(m$)
+        char$ = RIGHT$(LEFT$(m$, col), 1)
+        FOR row = 1 TO 14
+            IF row > 1 THEN LOCATE row - 1, col + 30: PRINT " ";
+            LOCATE row, col + 30: PRINT char$;
+            _LIMIT 50
+        NEXT row
+    NEXT col
+
+    Pause
+END SUB
 
 
 '==========================================================================
