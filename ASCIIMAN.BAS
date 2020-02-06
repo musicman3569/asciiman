@@ -615,6 +615,8 @@ END FUNCTION
 ' @param gameLevel% Number of the game level to start.
 '--------------------------------------------------------------------------
 SUB RunMainGameLoop
+    ClearInkey
+
     ' Keep running the game loop until the GAME_STATE.nextLevel changes from
     ' its original value. 0 indicates game over/quit
     WHILE GAME_STATE.nextLevel = GAME_STATE.loadedLevel
@@ -868,11 +870,15 @@ END SUB
 SUB SpriteApplyGravity (index)
 
     '---Player landing on solid ground/slides ends jump
-    IF SPRITES(index).gravityTimer > 0 THEN
-        IF SPRITES(index).moveType = SPRITE_MOVE_PLAYER_CONTROLLED THEN
-            rowBelow = SPRITES(index).position.row + SGN(GAME_STATE.gravity)
-            collisionBelow = GetCollisionType(index, GetSpriteIndexAt(rowBelow, SPRITES(index).position.col), CharAt$(rowBelow, SPRITES(index).position.col))
-            IF collisionBelow = CHAR_COLLISION_SOLID OR collisionBelow = CHAR_COLLISION_PUSH_LEFT OR collisionBelow = CHAR_COLLISION_PUSH_RIGHT THEN
+    IF SPRITES(index).playerIndex AND SPRITES(index).gravityTimer > 0 THEN
+        rowBelow = SPRITES(index).position.row + SGN(GAME_STATE.gravity)
+        spriteBelowIndex = GetSpriteIndexAt(rowBelow, SPRITES(index).position.col)
+        collisionBelow = GetCollisionType(index, spriteBelowIndex, CharAt$(rowBelow, SPRITES(index).position.col))
+        IF collisionBelow = CHAR_COLLISION_SOLID OR collisionBelow = CHAR_COLLISION_PUSH_LEFT OR collisionBelow = CHAR_COLLISION_PUSH_RIGHT THEN
+            '--- End jump if NOT jumping over another player
+            IF spriteBelowIndex = NULL_INDEX THEN
+                SPRITES(index).gravityTimer = 0
+            ELSEIF SPRITES(spriteBelowIndex).playerIndex < 1 THEN
                 SPRITES(index).gravityTimer = 0
             END IF
         END IF
