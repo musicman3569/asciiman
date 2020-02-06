@@ -913,9 +913,13 @@ SUB SpriteApplyFriction (index)
         rowBelow = SPRITES(index).position.row + SGN(GAME_STATE.gravity)
 
         IF rowBelow >= GAME_AREA.min.row AND rowBelow <= GAME_AREA.max.col THEN
-            onSolid = GetCollisionType(index, NULL_INDEX, CharAt$(rowBelow, SPRITES(index).position.col))
-            IF ABS(SPRITES(index).velocity.col) > 0 AND onSolid THEN
-                SPRITES(index).velocity.col = SPRITES(index).velocity.col - SPRITES(index).friction * SGN(SPRITES(index).velocity.col)
+            '--- Only check friction if velocity is non-zero
+            IF ABS(SPRITES(index).velocity.col) > 0 THEN
+                collisionType = GetCollisionType(index, GetSpriteIndexAt(rowBelow, SPRITES(index).position.col), CharAt$(rowBelow, SPRITES(index).position.col))
+                '--- Apply friction if it is not a "frictionless" push collision
+                IF collisionType <> CHAR_COLLISION_PUSH_LEFT AND collisionType <> CHAR_COLLISION_PUSH_RIGHT THEN
+                    SPRITES(index).velocity.col = SPRITES(index).velocity.col - SPRITES(index).friction * SGN(SPRITES(index).velocity.col)
+                END IF
             END IF
         END IF
     END IF
@@ -1148,8 +1152,10 @@ SUB CheckCollision (spriteIndex, row, col)
             SpriteDeath targetSpriteIndex, spriteIndex
             SpriteAllowMove spriteIndex, row, col
         CASE CHAR_COLLISION_PUSH_LEFT
+            SPRITES(spriteIndex).velocity.col = -1
             SpriteChangeMoveTarget spriteIndex, row, col - 1
         CASE CHAR_COLLISION_PUSH_RIGHT
+            SPRITES(spriteIndex).velocity.col = 1
             SpriteChangeMoveTarget spriteIndex, row, col + 1
         CASE CHAR_COLLISION_VERTICAL_DEATH
             IF sprite.position.row <> row THEN
@@ -1250,30 +1256,26 @@ SUB SpriteBlockMove (spriteIndex, row, col)
 
         '--- Since the angle is blocked, try the best horizontal or vertical move.
         IF emptyVertical AND emptyHorizontal = 0 THEN
+            SPRITES(spriteIndex).velocity.col = 0
             SpriteChangeMoveTarget spriteIndex, row, sprite.position.col '--- Only vertical move is empty, go there
         ELSEIF emptyHorizontal AND emptyVertical = 0 THEN
+            SPRITES(spriteIndex).velocity.row = 0
             SpriteChangeMoveTarget spriteIndex, sprite.position.row, col '--- Only horizontal move is empty, go there
         ELSEIF ABS(sprite.velocity.row) > ABS(sprite.velocity.col) THEN
+            SPRITES(spriteIndex).velocity.col = 0
             SpriteChangeMoveTarget spriteIndex, row, sprite.position.col '--- Stronger vertical velocity, move vertical
         ELSEIF ABS(sprite.velocity.col) > ABS(sprite.velocity.row) THEN
+            SPRITES(spriteIndex).velocity.row = 0
             SpriteChangeMoveTarget spriteIndex, sprite.position.row, col '--- Stronger horizontal velocity, move horizontal
         ELSE
-            '--- Perfect 45 degree angle and equal horizontal/vertical velocity
-            '--- Try a vertical move first.
-            SpriteChangeMoveTarget spriteIndex, row, sprite.position.col
-            newRow = SPRITES(spriteIndex).position.row
-            newCol = SPRITES(spriteIndex).position.col
-
-            '--- If the vertical move didn't change anything, try a horizontal move.
-            IF newRow = sprite.position.row AND newCol = sprite.position.col THEN
-                SpriteChangeMoveTarget spriteIndex, sprite.position.row, col
-            END IF
+            SPRITES(spriteIndex).velocity.col = 0 '--- Perfect 45-degree collision, favor vertical movement (gravity)
+            SpriteChangeMoveTarget spriteIndex, sprite.position.row, sprite.position.col
         END IF
     ELSEIF sprite.position.row <> row THEN
-        sprite.velocity.row = 0 '--- Vertical block. Stop vertical velocity and further movement.
+        SPRITES(spriteIndex).velocity.row = 0 '--- Vertical block. Stop vertical velocity and further movement.
         SpriteChangeMoveTarget spriteIndex, sprite.position.row, sprite.position.col
     ELSEIF sprite.position.col <> col THEN
-        sprite.velocity.col = 0 '--- Horizontal block. Stop horizontal velocity and further movement.
+        SPRITES(spriteIndex).velocity.col = 0 '--- Horizontal block. Stop horizontal velocity and further movement.
         SpriteChangeMoveTarget spriteIndex, sprite.position.row, sprite.position.col
     END IF
 END SUB
