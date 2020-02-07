@@ -681,6 +681,13 @@ SUB LoadLevelData
         KEY_MAP(k).needsRelease = 0
     NEXT k
 
+    '--- Clear any previous player movement values
+    FOR p = 1 TO GAME_STATE.playerCount
+        spriteIndex = PLAYER(p).spriteIndex
+        SPRITES(spriteIndex).velocity.row = 0
+        SPRITES(spriteIndex).velocity.col = 0
+    NEXT p
+
     ParseLevelData
 END SUB
 
@@ -693,7 +700,7 @@ SUB DisplayLevelTitle (title$)
     CLS
     ClearInkey
     PrintAt 10, 10, 15, title$
-    SLEEP 3
+    _DELAY 3
     ClearInkey
     CLS
 END SUB
@@ -940,8 +947,12 @@ SUB SpriteMoveLRRandomGround (index)
         '--- Move randomly 1 left, 1 right, or stay put (1/3 chance of each)
         SPRITES(index).velocity.col = INT(RND * 3) - 1
 
+        '--- Check for solid ground just below where the sprite should move.
+        rowBelow = SPRITES(index).position.row + 1
+        colBelow = SPRITES(index).position.col + SGN(SPRITES(index).velocity.col)
+
         '--- If it's not solid ground or an attack on the player, cancel moving there
-        collisionBelow = SPRITES(index).collisionBelow
+        collisionBelow = GetCollisionType(index, GetSpriteIndexAt(rowBelow, colBelow), CharAt$(rowBelow, colBelow))
         IF collisionBelow <> CHAR_COLLISION_SOLID AND collisionBelow <> CHAR_COLLISION_ENEMY_DEATH THEN
             SPRITES(index).velocity.col = 0
         END IF
