@@ -214,6 +214,8 @@ TYPE Sprite
     friction AS INTEGER '--- Amount of velocity reduction to apply each frame when on a solid. Defaults to 1.
     playerIndex AS INTEGER '--- Index of the PLAYER() that controls the sprite. 0 = not player controlled (default).
     playerPoints AS INTEGER '--- Number of points to award a player if on death of this sprite
+    collisionBelow AS INTEGER '--- Stores the CHAR_COLLISION_{...} type between the sprite and the char gravitationally below it. Needed for several checks, so this improves performance by caching it.
+    spriteBelowIndex AS INTEGER '--- Index of the sprite gravitationally below this sprite, or NULL_INDEX for none.
 END TYPE
 
 DIM SHARED SPRITES(200) AS Sprite '--- Array to store all active game sprites
@@ -759,11 +761,12 @@ SUB ParseLevelData
 END SUB
 
 '--------------------------------------------------------------------------
-' Returns the CHAR_COLLISION_{collision_type} constant that specifies
-' the collision behavior for a Sprite as it moves onto another char.
+' Returns the index of the SPRITES() array element at a specified
+' row and column, or NULL_INDEX for none.
 '
-' @param char$ Character to get the collision behavior for
-' @return Returns one of the CHAR_COLLISION global constants.
+' @param row Game area row to check for sprites.
+' @param col Game area col to check for sprites.
+' @return Returns an index for referencing the SPRITES() array, of the sprite at the specified row/col.
 '--------------------------------------------------------------------------
 FUNCTION GetSpriteIndexAt (row, col)
     GetSpriteIndexAt = NULL_INDEX
@@ -836,6 +839,7 @@ SUB MoveSprites
     FOR index = 0 TO SPRITE_COUNT - 1
         '--- Only move sprite if it is alive and in a valid game area position
         IF SpriteIsActive(SPRITES(index)) THEN
+            SpriteUpdateCollisionBelow index
             SpriteApplyGravity index
 
             '--- Apply automatic or player-controlled SPRITE_MOVE_{...} types
@@ -846,17 +850,8 @@ SUB MoveSprites
                     SpriteMovePlayerControlled index
             END SELECT
 
-            '--- Store original position so we can tell if the Sprite moved
-            originalRow = SPRITES(index).position.row
-            originalCol = SPRITES(index).position.col
-
             '--- Move the Sprite using the new velocity values
-            SpriteChangeMoveTarget index, originalRow + SPRITES(index).velocity.row, originalCol + SPRITES(index).velocity.col
-
-            '--- If the sprite moved and did not leave a "dead splat" clear the spot it was in
-            IF originalRow <> SPRITES(index).position.row OR originalCol <> SPRITES(index).position.col THEN
-                IF SpriteIsActive(SPRITES(index)) AND CharAt$(originalRow, originalCol) <> DEAD_SPLAT$ THEN PrintAt originalRow, originalCol, 0, " "
-            END IF
+            SpriteChangeMoveTarget index, SPRITES(index).position.row + SPRITES(index).velocity.row, SPRITES(index).position.col + SPRITES(index).velocity.col
         END IF
     NEXT index
 END SUB
@@ -868,12 +863,12 @@ END SUB
 ' @param index Sprite index to apply gravity to.
 '--------------------------------------------------------------------------
 SUB SpriteApplyGravity (index)
+    rowBelow = SPRITES(index).position.row + SGN(GAME_STATE.gravity)
+    spriteBelowIndex = SPRITES(index).spriteBelowIndex
+    collisionBelow = SPRITES(index).collisionBelow
 
     '---Player landing on solid ground/slides ends jump
     IF SPRITES(index).playerIndex AND SPRITES(index).gravityTimer > 0 THEN
-        rowBelow = SPRITES(index).position.row + SGN(GAME_STATE.gravity)
-        spriteBelowIndex = GetSpriteIndexAt(rowBelow, SPRITES(index).position.col)
-        collisionBelow = GetCollisionType(index, spriteBelowIndex, CharAt$(rowBelow, SPRITES(index).position.col))
         IF collisionBelow = CHAR_COLLISION_SOLID OR collisionBelow = CHAR_COLLISION_PUSH_LEFT OR collisionBelow = CHAR_COLLISION_PUSH_RIGHT THEN
             '--- End jump if NOT jumping over another player
             IF spriteBelowIndex = NULL_INDEX THEN
@@ -887,42 +882,47 @@ SUB SpriteApplyGravity (index)
     '--- Apply gravity based on sprite settings
     IF SPRITES(index).gravityTimer = 0 THEN
         IF SPRITES(index).gravity THEN
-            SpriteApplyFriction (index)
-            totalGravity = SPRITES(index).gravity * GAME_STATE.gravity
 
-            IF GAME_STATE.gravity > 0 THEN
-                SPRITES(index).velocity.row = GetMin(SPRITES(index).velocity.row + totalGravity, totalGravity)
-            ELSEIF GAME_STATE.gravity < 0 THEN
-                SPRITES(index).velocity.row = GetMax(SPRITES(index).velocity.row + totalGravity, totalGravity)
+            '--- Apply friction from ground when there is gravity
+            IF rowBelow >= GAME_AREA.min.row AND rowBelow <= GAME_AREA.max.col THEN
+                '--- Only check friction if it is a non-zero value
+                IF SPRITES(index).friction THEN
+                    '--- Apply friction if it is not a "frictionless" push collision
+                    IF collisionBelow <> CHAR_COLLISION_PUSH_LEFT AND collisionBelow <> CHAR_COLLISION_PUSH_RIGHT THEN
+                        SPRITES(index).velocity.col = SPRITES(index).velocity.col - SPRITES(index).friction * SGN(SPRITES(index).velocity.col)
+                    END IF
+                END IF
+            END IF
+
+            '--- Only apply gravity when not on a solid surface/object
+            IF collisionBelow <> CHAR_COLLISION_SOLID THEN
+                totalGravity = SPRITES(index).gravity * GAME_STATE.gravity
+
+                IF GAME_STATE.gravity > 0 THEN
+                    SPRITES(index).velocity.row = GetMin(SPRITES(index).velocity.row + totalGravity, totalGravity)
+                ELSEIF GAME_STATE.gravity < 0 THEN
+                    SPRITES(index).velocity.row = GetMax(SPRITES(index).velocity.row + totalGravity, totalGravity)
+                END IF
             END IF
         END IF
     ELSE
-        SPRITES(index).velocity.row = 0
         SPRITES(index).gravityTimer = SPRITES(index).gravityTimer - 1
     END IF
 END SUB
 
 '--------------------------------------------------------------------------
-' Applies friction to a Sprite based on the Sprite's friction, and only
-' if it has gravity and is on a solid.
+' Updates the collisionBelow property of a Sprite.  Several movement and
+' collision checks need to check what type of collision is gravitationally
+' under a Sprite, so this caches the result so it doesn't have to be
+' recomputed each time.  Currently gets called by SpriteApplyGravity and
+' SpriteAllowMove.
 '
-' @param index Sprite index to apply friction to.
+' @param index SPRITES() array index of the sprite to update.
 '--------------------------------------------------------------------------
-SUB SpriteApplyFriction (index)
-    IF SPRITES(index).friction THEN
-        rowBelow = SPRITES(index).position.row + SGN(GAME_STATE.gravity)
-
-        IF rowBelow >= GAME_AREA.min.row AND rowBelow <= GAME_AREA.max.col THEN
-            '--- Only check friction if velocity is non-zero
-            IF ABS(SPRITES(index).velocity.col) > 0 THEN
-                collisionType = GetCollisionType(index, GetSpriteIndexAt(rowBelow, SPRITES(index).position.col), CharAt$(rowBelow, SPRITES(index).position.col))
-                '--- Apply friction if it is not a "frictionless" push collision
-                IF collisionType <> CHAR_COLLISION_PUSH_LEFT AND collisionType <> CHAR_COLLISION_PUSH_RIGHT THEN
-                    SPRITES(index).velocity.col = SPRITES(index).velocity.col - SPRITES(index).friction * SGN(SPRITES(index).velocity.col)
-                END IF
-            END IF
-        END IF
-    END IF
+SUB SpriteUpdateCollisionBelow (index)
+    rowBelow = SPRITES(index).position.row + SGN(GAME_STATE.gravity)
+    SPRITES(index).spriteBelowIndex = GetSpriteIndexAt(rowBelow, SPRITES(index).position.col)
+    SPRITES(index).collisionBelow = GetCollisionType(index, SPRITES(index).spriteBelowIndex, CharAt$(rowBelow, SPRITES(index).position.col))
 END SUB
 
 '--------------------------------------------------------------------------
@@ -940,13 +940,9 @@ SUB SpriteMoveLRRandomGround (index)
         '--- Move randomly 1 left, 1 right, or stay put (1/3 chance of each)
         SPRITES(index).velocity.col = INT(RND * 3) - 1
 
-        '--- Check for solid ground just below where the sprite should move.
-        rowBelow = SPRITES(index).position.row + 1
-        colBelow = SPRITES(index).position.col + SGN(SPRITES(index).velocity.col)
-
-        '--- If it's not solid ground, cancel moving there
-        collision = GetCollisionType(index, GetSpriteIndexAt(rowBelow, colBelow), CharAt$(rowBelow, colBelow))
-        IF collision <> CHAR_COLLISION_SOLID AND collision <> CHAR_COLLISION_ENEMY_DEATH THEN
+        '--- If it's not solid ground or an attack on the player, cancel moving there
+        collisionBelow = SPRITES(index).collisionBelow
+        IF collisionBelow <> CHAR_COLLISION_SOLID AND collisionBelow <> CHAR_COLLISION_ENEMY_DEATH THEN
             SPRITES(index).velocity.col = 0
         END IF
     ELSE
@@ -985,18 +981,17 @@ SUB SpriteMovePlayerControlled (spriteIndex)
                             SPRITES(spriteIndex).velocity.col = 1
                         END IF
                     CASE INPUT_ACTION_JUMP
-                        '--- Require jump key to be released before jumping again
-                        KeyMapSetNeedsRelease 1, playerIndex, INPUT_ACTION_JUMP
-                        PLAYER(playerIndex).jumpDistance = player.maxJumpDistance
-
                         '--- Check what is gravitationally below the player
-                        rowBelow = SPRITES(spriteIndex).position.row + SGN(GAME_STATE.gravity)
-                        colBelow = SPRITES(spriteIndex).position.col
-                        collisionBelow = GetCollisionType(spriteIndex, GetSpriteIndexAt(rowBelow, colBelow), CharAt$(rowBelow, colBelow))
+                        collisionBelow = SPRITES(spriteIndex).collisionBelow
 
                         '--- Only jump when on solid ground or slides
                         IF collisionBelow = CHAR_COLLISION_SOLID OR collisionBelow = CHAR_COLLISION_PUSH_LEFT OR collisionBelow = CHAR_COLLISION_PUSH_RIGHT THEN
-                            SPRITES(spriteIndex).velocity.row = SPRITES(spriteIndex).gravity * GAME_STATE.gravity * -1
+                            '--- Require jump key to be released before jumping again
+                            KeyMapSetNeedsRelease 1, playerIndex, INPUT_ACTION_JUMP
+                            PLAYER(playerIndex).jumpDistance = player.maxJumpDistance
+
+                            jumpDirection = SGN(GAME_STATE.gravity) * -1
+                            SpriteChangeMoveTarget spriteIndex, SPRITES(spriteIndex).position.row + jumpDirection, SPRITES(spriteIndex).position.col
                             SPRITES(spriteIndex).gravityTimer = 16
                         END IF
                     CASE INPUT_ACTION_SPIKEBALL
@@ -1015,14 +1010,18 @@ SUB SpriteMovePlayerControlled (spriteIndex)
     IF SPRITES(spriteIndex).moveTimer > 0 THEN
         SPRITES(spriteIndex).moveTimer = SPRITES(spriteIndex).moveTimer - 1
     END IF
-
-
-    '--- Escape
-    'IF KEY_INPUT(27) THEN
-    '    GAME_STATE.nextLevel = 0
-    'END IF
 END SUB
 
+'--------------------------------------------------------------------------
+' Require or unrequire an input to be released (meaning it falls out of
+' range for active input) before further input events will be treated as active.
+' Used for inputs where you don't want the player to hold the button/axis and
+' have the action happen continuously until they release the button/axis first.
+'
+' @param needRelease 1=Require input to be released, 0=Remove release requirement
+' @param playerIndex PLAYER() array Player instance whose input is being modified
+' @param inputAction$ INPUT_ACTION_{...} type for which the button release requirement will be applied.
+'--------------------------------------------------------------------------
 SUB KeyMapSetNeedsRelease (needsRelease, playerIndex, inputAction$)
     FOR k = 1 TO KEY_MAPS
         IF KEY_MAP(k).playerIndex = playerIndex AND KEY_MAP(k).inputAction = inputAction$ THEN
@@ -1044,12 +1043,21 @@ END SUB
 ' @param col Game area col to attempt to move the sprite to.
 '--------------------------------------------------------------------------
 SUB SpriteChangeMoveTarget (spriteIndex, row, col)
+    '--- Store original position so we can tell if the Sprite moved
+    originalRow = SPRITES(spriteIndex).position.row
+    originalCol = SPRITES(spriteIndex).position.col
+
     '--- Limit the move target to be withing the game area bounds
     SPRITES(spriteIndex).moveTo.row = GetMax(GAME_AREA.min.row, GetMin(GAME_AREA.max.row, row))
     SPRITES(spriteIndex).moveTo.col = GetMax(GAME_AREA.min.col, GetMin(GAME_AREA.max.col, col))
 
     '--- Move toward the new target
     SpriteMoveTowardTarget spriteIndex
+
+    '--- If the sprite moved and did not leave a "dead splat" clear the spot it was in
+    IF originalRow <> SPRITES(spriteIndex).position.row OR originalCol <> SPRITES(spriteIndex).position.col THEN
+        IF SpriteIsActive(SPRITES(spriteIndex)) AND CharAt$(originalRow, originalCol) <> DEAD_SPLAT$ THEN PrintAt originalRow, originalCol, 0, " "
+    END IF
 END SUB
 
 '--------------------------------------------------------------------------
@@ -1216,6 +1224,8 @@ SUB SpriteAllowMove (spriteIndex, row, col)
     SPRITES(spriteIndex).position.row = row
     SPRITES(spriteIndex).position.col = col
 
+    SpriteUpdateCollisionBelow spriteIndex
+
     '--- Check if this is a player sprite
     IF SPRITES(spriteIndex).playerIndex THEN
         playerIndex = SPRITES(spriteIndex).playerIndex
@@ -1251,8 +1261,8 @@ SUB SpriteBlockMove (spriteIndex, row, col)
 
     IF sprite.position.row <> row AND sprite.position.col <> col THEN
         '--- Blocked on an angle. First try a quick check on either side for empty spaces.
-        IF CharAt$(sprite.position.row, col) = " " THEN emptyHorizontal = 1 ELSE emptyHorizontal = 0
-        IF CharAt$(row, sprite.position.col) = " " THEN emptyVertical = 1 ELSE emptyVertical = 0
+        IF GetCollisionType(spriteIndex, NULL_INDEX, CharAt$(sprite.position.row, col)) = CHAR_COLLISION_NONE THEN emptyHorizontal = 1 ELSE emptyHorizontal = 0
+        IF GetCollisionType(spriteIndex, NULL_INDEX, CharAt$(row, sprite.position.col)) = CHAR_COLLISION_NONE THEN emptyVertical = 1 ELSE emptyVertical = 0
 
         '--- Since the angle is blocked, try the best horizontal or vertical move.
         IF emptyVertical AND emptyHorizontal = 0 THEN
