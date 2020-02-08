@@ -1312,7 +1312,7 @@ SUB SpriteExtraLife (spriteIndex)
 
     SELECT CASE SPRITES(spriteIndex).spriteType
         CASE SPRITE_TYPE_PLAYER, SPRITE_TYPE_PLAYER_SPIKEBALL, SPRITE_TYPE_PLAYER_DRAINED
-            IF GAME_STATE.soundEnabled = 1 THEN PLAY "MF T200 O1 L64 CDEFGAB>CDEFGAB>C"
+            IF GAME_STATE.soundEnabled = 1 THEN PLAY "MB T200 O1 L64 CDEFGAB>CDEFGAB>C"
     END SELECT
 END SUB
 
@@ -1348,14 +1348,14 @@ SUB SpriteDeath (spriteIndex, causedByIndex)
             SPRITES(spriteIndex).velocity.col = 0
 
             '--- Replace the template's .lives value with the deducted value
-            IF GAME_STATE.soundEnabled THEN SOUND 57, 10
+            IF GAME_STATE.soundEnabled THEN PLAY "MB O0 T120 L4 C"
             IF SPRITES(spriteIndex).lives < 1 THEN GAME_STATE.nextLevel = 0
 
             '--- Leave a splat the same color as the player was
             PrintAt sprite.position.row, sprite.position.col, sprite.charColor, DEAD_SPLAT$
         CASE SPRITE_TYPE_ENEMY1
             '--- Show a red splat for dead Enemy1 sprites
-            IF GAME_STATE.soundEnabled THEN SOUND 80, 2
+            IF GAME_STATE.soundEnabled THEN PLAY "MB O0 T120 L16 E-"
             replacementColor = CLR_GREEN
             replacementChar$ = DEAD_SPLAT$
     END SELECT
