@@ -677,8 +677,10 @@ SUB LoadLevelData
     PLAYER_MAX = 0
 
     '--- Clear all player key inputs from requiring key releases
+    ClearInkey
     FOR k = 1 TO KEY_MAPS
         KEY_MAP(k).needsRelease = 0
+        KEY_MAP(k).value = 0
     NEXT k
 
     '--- Clear any previous player movement values
@@ -876,6 +878,9 @@ SUB SpriteApplyGravity (index)
 
     '---Player landing on solid ground/slides ends jump
     IF SPRITES(index).playerIndex AND SPRITES(index).gravityTimer > 0 THEN
+        '--- Stop player from floating up any more after the initial jump (which got processed in the previous frame)
+        SPRITES(index).velocity.row = 0
+
         IF collisionBelow = CHAR_COLLISION_SOLID OR collisionBelow = CHAR_COLLISION_PUSH_LEFT OR collisionBelow = CHAR_COLLISION_PUSH_RIGHT THEN
             '--- End jump if NOT jumping over another player
             IF spriteBelowIndex = NULL_INDEX THEN
@@ -895,7 +900,7 @@ SUB SpriteApplyGravity (index)
                 '--- Only check friction if it is a non-zero value
                 IF SPRITES(index).friction THEN
                     '--- Apply friction if it is not a "frictionless" push collision
-                    IF collisionBelow <> CHAR_COLLISION_PUSH_LEFT AND collisionBelow <> CHAR_COLLISION_PUSH_RIGHT THEN
+                    IF collisionBelow <> CHAR_COLLISION_NONE THEN
                         SPRITES(index).velocity.col = SPRITES(index).velocity.col - SPRITES(index).friction * SGN(SPRITES(index).velocity.col)
                     END IF
                 END IF
@@ -1000,9 +1005,7 @@ SUB SpriteMovePlayerControlled (spriteIndex)
                             '--- Require jump key to be released before jumping again
                             KeyMapSetNeedsRelease 1, playerIndex, INPUT_ACTION_JUMP
                             PLAYER(playerIndex).jumpDistance = player.maxJumpDistance
-
-                            jumpDirection = SGN(GAME_STATE.gravity) * -1
-                            SpriteChangeMoveTarget spriteIndex, SPRITES(spriteIndex).position.row + jumpDirection, SPRITES(spriteIndex).position.col
+                            SPRITES(spriteIndex).velocity.row = SGN(GAME_STATE.gravity) * -1
                             SPRITES(spriteIndex).gravityTimer = 16
                         END IF
                     CASE INPUT_ACTION_SPIKEBALL
@@ -1537,6 +1540,8 @@ SUB IntroVid
     CLS
     m$ = "ASCII-MAN  "
     ClearInkey
+
+    PLAY "MB O1 T160 P2 L8GG16F16B-G>CCC+D<G L16 GFGB-GFG"
 
     '--- Animate the letters dropping 1 at a time into the title
     FOR col = 1 TO LEN(m$)
