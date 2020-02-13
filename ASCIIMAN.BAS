@@ -216,6 +216,7 @@ TYPE Sprite
     playerPoints AS INTEGER '--- Number of points to award a player if on death of this sprite
     collisionBelow AS INTEGER '--- Stores the CHAR_COLLISION_{...} type between the sprite and the char gravitationally below it. Needed for several checks, so this improves performance by caching it.
     spriteBelowIndex AS INTEGER '--- Index of the sprite gravitationally below this sprite, or NULL_INDEX for none.
+    levelDataChar AS STRING '--- Character used in level data files to represent the given sprite type.
 END TYPE
 
 DIM SHARED SPRITES(200) AS Sprite '--- Array to store all active game sprites
@@ -246,6 +247,7 @@ SPRITE_TYPES(SPRITE_TYPE_PLAYER).charColor = CLR_YELLOW
 SPRITE_TYPES(SPRITE_TYPE_PLAYER).gravity = 1
 SPRITE_TYPES(SPRITE_TYPE_PLAYER).gravityTimer = 0
 SPRITE_TYPES(SPRITE_TYPE_PLAYER).lives = 9
+SPRITE_TYPES(SPRITE_TYPE_PLAYER).levelDataChar = ""
 '--- Player Spikeball Sprite template
 SPRITE_TYPES(SPRITE_TYPE_PLAYER_SPIKEBALL).spriteType = SPRITE_TYPE_PLAYER_SPIKEBALL
 SPRITE_TYPES(SPRITE_TYPE_PLAYER_SPIKEBALL).moveType = SPRITE_MOVE_NONE
@@ -257,6 +259,7 @@ SPRITE_TYPES(SPRITE_TYPE_PLAYER_SPIKEBALL).gravity = 1
 SPRITE_TYPES(SPRITE_TYPE_PLAYER_SPIKEBALL).gravityTimer = 0
 SPRITE_TYPES(SPRITE_TYPE_PLAYER_SPIKEBALL).nextSpriteType = SPRITE_TYPE_PLAYER_DRAINED
 SPRITE_TYPES(SPRITE_TYPE_PLAYER_SPIKEBALL).nextSpriteTypeTimer = 5
+SPRITE_TYPES(SPRITE_TYPE_PLAYER_SPIKEBALL).levelDataChar = ""
 '--- Player Drained Sprite template (can't use attacks)
 SPRITE_TYPES(SPRITE_TYPE_PLAYER_DRAINED).spriteType = SPRITE_TYPE_PLAYER_DRAINED
 SPRITE_TYPES(SPRITE_TYPE_PLAYER_DRAINED).moveType = SPRITE_MOVE_PLAYER_CONTROLLED
@@ -268,6 +271,7 @@ SPRITE_TYPES(SPRITE_TYPE_PLAYER_DRAINED).gravity = 1
 SPRITE_TYPES(SPRITE_TYPE_PLAYER_DRAINED).gravityTimer = 0
 SPRITE_TYPES(SPRITE_TYPE_PLAYER_DRAINED).nextSpriteType = SPRITE_TYPE_PLAYER
 SPRITE_TYPES(SPRITE_TYPE_PLAYER_DRAINED).nextSpriteTypeTimer = 16
+SPRITE_TYPES(SPRITE_TYPE_PLAYER_DRAINED).levelDataChar = ""
 '---  Enemy1 Sprite template
 SPRITE_TYPES(SPRITE_TYPE_ENEMY1).spriteType = SPRITE_TYPE_ENEMY1
 SPRITE_TYPES(SPRITE_TYPE_ENEMY1).moveType = SPRITE_MOVE_LR_RANDOM_GROUND
@@ -278,6 +282,7 @@ SPRITE_TYPES(SPRITE_TYPE_ENEMY1).charColor = CLR_GREEN
 SPRITE_TYPES(SPRITE_TYPE_ENEMY1).gravity = 1
 SPRITE_TYPES(SPRITE_TYPE_ENEMY1).gravityTimer = 0
 SPRITE_TYPES(SPRITE_TYPE_ENEMY1).playerPoints = 50
+SPRITE_TYPES(SPRITE_TYPE_ENEMY1).levelDataChar = "O"
 '--- Fire Sprite template
 SPRITE_TYPES(SPRITE_TYPE_FIRE).spriteType = SPRITE_TYPE_FIRE
 SPRITE_TYPES(SPRITE_TYPE_FIRE).moveType = SPRITE_MOVE_NONE
@@ -285,8 +290,9 @@ SPRITE_TYPES(SPRITE_TYPE_FIRE).frames = ".;'.;`"
 SPRITE_TYPES(SPRITE_TYPE_FIRE).maxFrame = 6
 SPRITE_TYPES(SPRITE_TYPE_FIRE).frameRate = 1
 SPRITE_TYPES(SPRITE_TYPE_FIRE).charColor = CLR_LT_RED
-SPRITE_TYPES(SPRITE_TYPE_FIRE).gravity = 1
+SPRITE_TYPES(SPRITE_TYPE_FIRE).gravity = 0
 SPRITE_TYPES(SPRITE_TYPE_FIRE).gravityTimer = 0
+SPRITE_TYPES(SPRITE_TYPE_FIRE).levelDataChar = "F"
 '--- Extra Life Sprite Template
 SPRITE_TYPES(SPRITE_TYPE_EXTRA_LIFE).spriteType = SPRITE_TYPE_EXTRA_LIFE
 SPRITE_TYPES(SPRITE_TYPE_EXTRA_LIFE).moveType = SPRITE_MOVE_NONE
@@ -297,6 +303,7 @@ SPRITE_TYPES(SPRITE_TYPE_EXTRA_LIFE).charColor = CLR_LT_CYAN
 SPRITE_TYPES(SPRITE_TYPE_EXTRA_LIFE).gravity = 1
 SPRITE_TYPES(SPRITE_TYPE_EXTRA_LIFE).gravityTimer = 0
 SPRITE_TYPES(SPRITE_TYPE_EXTRA_LIFE).playerPoints = 200
+SPRITE_TYPES(SPRITE_TYPE_EXTRA_LIFE).levelDataChar = ""
 '--- Spike Sprite template
 SPRITE_TYPES(SPRITE_TYPE_SPIKE).spriteType = SPRITE_TYPE_SPIKE
 SPRITE_TYPES(SPRITE_TYPE_SPIKE).moveType = SPRITE_MOVE_NONE
@@ -306,6 +313,7 @@ SPRITE_TYPES(SPRITE_TYPE_SPIKE).frameRate = 0
 SPRITE_TYPES(SPRITE_TYPE_SPIKE).charColor = CLR_LT_CYAN
 SPRITE_TYPES(SPRITE_TYPE_SPIKE).gravity = 0
 SPRITE_TYPES(SPRITE_TYPE_SPIKE).gravityTimer = 0
+SPRITE_TYPES(SPRITE_TYPE_SPIKE).levelDataChar = "³"
 '--- Slide Right Sprite template
 SPRITE_TYPES(SPRITE_TYPE_SLIDE_R).spriteType = SPRITE_TYPE_SLIDE_R
 SPRITE_TYPES(SPRITE_TYPE_SLIDE_R).moveType = SPRITE_MOVE_NONE
@@ -315,6 +323,7 @@ SPRITE_TYPES(SPRITE_TYPE_SLIDE_R).frameRate = 0
 SPRITE_TYPES(SPRITE_TYPE_SLIDE_R).charColor = CLR_BROWN
 SPRITE_TYPES(SPRITE_TYPE_SLIDE_R).gravity = 0
 SPRITE_TYPES(SPRITE_TYPE_SLIDE_R).gravityTimer = 0
+SPRITE_TYPES(SPRITE_TYPE_SLIDE_R).levelDataChar = "\"
 '--- Slide Left Sprite template
 SPRITE_TYPES(SPRITE_TYPE_SLIDE_L).spriteType = SPRITE_TYPE_SLIDE_L
 SPRITE_TYPES(SPRITE_TYPE_SLIDE_L).moveType = SPRITE_MOVE_NONE
@@ -324,6 +333,7 @@ SPRITE_TYPES(SPRITE_TYPE_SLIDE_L).frameRate = 0
 SPRITE_TYPES(SPRITE_TYPE_SLIDE_L).charColor = CLR_BROWN
 SPRITE_TYPES(SPRITE_TYPE_SLIDE_L).gravity = 0
 SPRITE_TYPES(SPRITE_TYPE_SLIDE_L).gravityTimer = 0
+SPRITE_TYPES(SPRITE_TYPE_SLIDE_L).levelDataChar = "/"
 '--- Next Level Sprite template
 SPRITE_TYPES(SPRITE_TYPE_NEXT_LEVEL).spriteType = SPRITE_TYPE_NEXT_LEVEL
 SPRITE_TYPES(SPRITE_TYPE_NEXT_LEVEL).moveType = SPRITE_MOVE_NONE
@@ -334,6 +344,7 @@ SPRITE_TYPES(SPRITE_TYPE_NEXT_LEVEL).charColor = CLR_LT_MAGENTA
 SPRITE_TYPES(SPRITE_TYPE_NEXT_LEVEL).gravity = 0
 SPRITE_TYPES(SPRITE_TYPE_NEXT_LEVEL).gravityTimer = 0
 SPRITE_TYPES(SPRITE_TYPE_NEXT_LEVEL).playerPoints = 100
+SPRITE_TYPES(SPRITE_TYPE_NEXT_LEVEL).levelDataChar = "°"
 
 '--------------------------------------------------------------------------
 ' Sprite collision mappings.
@@ -487,7 +498,7 @@ END SUB
 ' After all players have joined, a continuation key is pressed to continue.
 '--------------------------------------------------------------------------
 SUB WaitForPlayersToJoin
-    CLS
+    CLS 0
     PrintAt 2, 1, 10, "Waiting for players...Press any button to join."
     PrintAt 3, 1, 10, "Press Esc to quit."
     COLOR
@@ -567,12 +578,18 @@ SUB SetPlayerInputs (deviceIndex)
     deviceName$ = GetDeviceName$(deviceIndex)
 
     '--- Auto-configure the input device button mappings by the detected device name
+    '--- More Controller type configurations can be added here.
     SELECT CASE deviceName$
-        CASE "Controller (XBOX 360 For Windows)", "Controller (Xbox One For Windows)"
+        CASE "Controller (XBOX 360 For Windows)", "Controller (Xbox One For Windows)", "Controller (Rock Candy Gamepad for Xbox 360)"
             AddKeyMap playerIndex, deviceIndex, INPUT_ACTION_LEFT, INPUT_TYPE_AXIS, 1, -1, -0.7, "Joystick Left"
             AddKeyMap playerIndex, deviceIndex, INPUT_ACTION_RIGHT, INPUT_TYPE_AXIS, 1, 0.7, 1, "Joystick Right"
             AddKeyMap playerIndex, deviceIndex, INPUT_ACTION_JUMP, INPUT_TYPE_BUTTON, 1, -1, -1, "A Button"
             AddKeyMap playerIndex, deviceIndex, INPUT_ACTION_SPIKEBALL, INPUT_TYPE_BUTTON, 3, -1, -1, "X Button"
+        CASE "Microsoft SideWinder Precision Pro (USB)"
+            AddKeyMap playerIndex, deviceIndex, INPUT_ACTION_LEFT, INPUT_TYPE_AXIS, 1, -1, -0.5, "Joystick Left"
+            AddKeyMap playerIndex, deviceIndex, INPUT_ACTION_RIGHT, INPUT_TYPE_AXIS, 1, 0.5, 1, "Joystick Right"
+            AddKeyMap playerIndex, deviceIndex, INPUT_ACTION_JUMP, INPUT_TYPE_BUTTON, 5, -1, -1, "A Button"
+            AddKeyMap playerIndex, deviceIndex, INPUT_ACTION_SPIKEBALL, INPUT_TYPE_BUTTON, 1, -1, -1, "Joystick Trigger 1"
         CASE "USB Gamepad "
             AddKeyMap playerIndex, deviceIndex, INPUT_ACTION_LEFT, INPUT_TYPE_AXIS, 1, -1, -0.7, "D-Pad Left"
             AddKeyMap playerIndex, deviceIndex, INPUT_ACTION_RIGHT, INPUT_TYPE_AXIS, 1, 0.7, 1, "D-Pad Right"
@@ -583,6 +600,11 @@ SUB SetPlayerInputs (deviceIndex)
             AddKeyMap playerIndex, deviceIndex, INPUT_ACTION_RIGHT, INPUT_TYPE_BUTTON, 334, -1, -1, "Right Arrow Key"
             AddKeyMap playerIndex, deviceIndex, INPUT_ACTION_JUMP, INPUT_TYPE_BUTTON, 329, -1, -1, "Up Arrow Key"
             AddKeyMap playerIndex, deviceIndex, INPUT_ACTION_SPIKEBALL, INPUT_TYPE_BUTTON, 337, -1, -1, "Down Arrow Key"
+        CASE ELSE '--- Generic controller config
+            AddKeyMap playerIndex, deviceIndex, INPUT_ACTION_LEFT, INPUT_TYPE_AXIS, 1, -1, -0.7, "Axis Left"
+            AddKeyMap playerIndex, deviceIndex, INPUT_ACTION_RIGHT, INPUT_TYPE_AXIS, 1, 0.7, 1, "Axis Right"
+            AddKeyMap playerIndex, deviceIndex, INPUT_ACTION_JUMP, INPUT_TYPE_BUTTON, 1, -1, -1, "Button 1"
+            AddKeyMap playerIndex, deviceIndex, INPUT_ACTION_SPIKEBALL, INPUT_TYPE_BUTTON, 2, -1, -1, "Button 2"
     END SELECT
 
     '--- Display the newly added player and key mappings
@@ -661,6 +683,7 @@ SUB LoadLevelData
     '--- First line has the title of the level to be returned
     INPUT #1, GAME_STATE.levelTitle
     DisplayLevelTitle GAME_STATE.levelTitle
+    CLS 0
 
     '--- Read/render file data to the screen
     FOR row = GAME_AREA.min.row TO GAME_AREA.max.row
@@ -676,13 +699,6 @@ SUB LoadLevelData
     SPRITE_COUNT = 0
     PLAYER_MAX = 0
 
-    '--- Clear all player key inputs from requiring key releases
-    ClearInkey
-    FOR k = 1 TO KEY_MAPS
-        KEY_MAP(k).needsRelease = 0
-        KEY_MAP(k).value = 0
-    NEXT k
-
     '--- Clear any previous player movement values
     FOR p = 1 TO GAME_STATE.playerCount
         spriteIndex = PLAYER(p).spriteIndex
@@ -691,6 +707,13 @@ SUB LoadLevelData
     NEXT p
 
     ParseLevelData
+
+    '--- Clear all player key inputs from requiring key releases
+    ClearInkey
+    FOR k = 1 TO KEY_MAPS
+        KEY_MAP(k).needsRelease = 0
+        KEY_MAP(k).value = 0
+    NEXT k
 END SUB
 
 '--------------------------------------------------------------------------
@@ -699,12 +722,11 @@ END SUB
 ' @param title$ Level title text to display on screen
 '--------------------------------------------------------------------------
 SUB DisplayLevelTitle (title$)
-    CLS
+    CLS 0
     ClearInkey
     PrintAt 10, 10, 15, title$
     _DELAY 3
     ClearInkey
-    CLS
 END SUB
 
 '--------------------------------------------------------------------------
@@ -741,10 +763,6 @@ SUB ParseLevelData
                 CASE "S" '--- Solid color ground (untextured)
                     COLOR CLR_GRAY
                     char$ = "Û"
-                CASE "O" '--- Enemy1 SPRITE
-                    char$ = "•"
-                CASE "F" '--- Fire SPRITE
-                    char$ = "'"
                 CASE ELSE
                     COLOR CLR_GRAY
             END SELECT
@@ -1524,7 +1542,7 @@ FUNCTION GetSpriteType (char$)
     '--- Search all characters in all the SpriteTypes animation frames
     IF char$ <> " " THEN
         FOR spriteType = 1 TO SPRITE_TYPES_MAX
-            IF INSTR(SPRITE_TYPES(spriteType).frames, char$) THEN
+            IF SPRITE_TYPES(spriteType).levelDataChar = char$ THEN
                 GetSpriteType = spriteType
                 EXIT FOR
             END IF
@@ -1537,7 +1555,7 @@ END FUNCTION
 ' by pressing a key on the keyboard.
 '--------------------------------------------------------------------------
 SUB IntroVid
-    CLS
+    CLS 0
     m$ = "ASCII-MAN  "
     ClearInkey
 
@@ -1603,7 +1621,7 @@ SUB IntroVid
 END SUB
 
 SUB DeadVid
-    CLS
+    CLS 0
     COLOR CLR_LT_RED
     m$ = "Game Over"
     FOR col = 1 TO LEN(m$)
@@ -1644,7 +1662,7 @@ END SUB
 ' needs to be run once when the program starts.
 '--------------------------------------------------------------------------
 SUB SetDisplayMode
-    CLS: SCREEN 12
+    SCREEN 12: CLS 0
     _FULLSCREEN _SQUAREPIXELS
 END SUB
 
@@ -1702,7 +1720,11 @@ END FUNCTION
 ' @param col% Screen col to read.
 '--------------------------------------------------------------------------
 FUNCTION CharAt$ (row, col)
-    CharAt$ = CHR$(SCREEN(row, col))
+    IF row < GAME_AREA.min.row OR row > GAME_AREA.max.row OR col < GAME_AREA.min.col OR col > GAME_AREA.max.col THEN
+        CharAt$ = " "
+    ELSE
+        CharAt$ = CHR$(SCREEN(row, col))
+    END IF
 END FUNCTION
 
 FUNCTION GetMax (valueA, valueB)
