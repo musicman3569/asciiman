@@ -1727,10 +1727,24 @@ FUNCTION CharAt$ (row, col)
     END IF
 END FUNCTION
 
+'--------------------------------------------------------------------------
+' Get the maximum of 2 integer values.
+'
+' @param valueA First value to compare.
+' @param valueB Second value to compare.
+' @return Maximum value between valueA and valueB
+'--------------------------------------------------------------------------
 FUNCTION GetMax (valueA, valueB)
     IF (valueA > valueB) THEN GetMax = valueA ELSE GetMax = valueB
 END FUNCTION
 
+'--------------------------------------------------------------------------
+' Get the minimum of 2 integer values.
+'
+' @param valueA First value to compare.
+' @param valueB Second value to compare.
+' @return Minimum value between valueA and valueB
+'--------------------------------------------------------------------------
 FUNCTION GetMin (valueA, valueB)
     IF (valueA < valueB) THEN GetMin = valueA ELSE GetMin = valueB
 END FUNCTION
