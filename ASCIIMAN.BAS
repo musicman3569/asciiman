@@ -219,7 +219,7 @@ TYPE Sprite
     levelDataChar AS STRING '--- Character used in level data files to represent the given sprite type.
 END TYPE
 
-DIM SHARED SPRITES(200) AS Sprite '--- Array to store all active game sprites
+DIM SHARED SPRITES(1000) AS Sprite '--- Array to store all active game sprites
 DIM SHARED SPRITE_COUNT: SPRITE_COUNT = 0 '--- Number of active sprites.  Increment as they are added.
 
 '--------------------------------------------------------------------------
@@ -460,10 +460,10 @@ KEY(15) ON
 ' Start Program Execution
 '--------------------------------------------------------------------------
 SetDisplayMode
-IntroVid
+'IntroVid
 WaitForPlayersToJoin
 
-WHILE GAME_STATE.nextLevel > 0 AND GAME_STATE.nextLevel < 10
+WHILE GAME_STATE.nextLevel > 0 AND GAME_STATE.nextLevel < 11
     LoadLevelData
     RunMainGameLoop
 
@@ -660,7 +660,7 @@ END SUB
 '--------------------------------------------------------------------------
 SUB RenderStatusLine
     PrintAt SCREEN_AREA.max.row, 73, 7, "Esc=Quit"
-    PrintAt SCREEN_AREA.max.row, 1, 15, GAME_STATE.levelTitle
+    PrintAt SCREEN_AREA.max.row, 1, 15, "Level" + STR$(GAME_STATE.loadedLevel) + " - " + GAME_STATE.levelTitle
 
     FOR p = 1 TO PLAYER_MAX
         COLOR PLAYER(p).spriteColor
@@ -682,7 +682,7 @@ SUB LoadLevelData
 
     '--- First line has the title of the level to be returned
     INPUT #1, GAME_STATE.levelTitle
-    DisplayLevelTitle GAME_STATE.levelTitle
+    DisplayLevelTitle "Level" + STR$(GAME_STATE.nextLevel) + " - " + GAME_STATE.levelTitle
     CLS 0
 
     '--- Read/render file data to the screen
@@ -780,6 +780,10 @@ SUB ParseLevelData
                         COLOR CLR_YELLOW
                         char$ = "³" '--- Conflicts with Spike sprite
                 END SELECT
+            END IF
+
+            IF ASC(char$) > 96 AND ASC(char$) < 123 THEN
+                char$ = UCASE$(char$)
             END IF
 
             LOCATE row, col: PRINT char$
@@ -966,7 +970,7 @@ END SUB
 SUB SpriteMoveLRRandomGround (index)
     IF SPRITES(index).moveTimer < 1 THEN
         '--- Only move once every 1 to 20 game frames
-        SPRITES(index).moveTimer = INT(RND * 20) + 1
+        SPRITES(index).moveTimer = INT(RND * 19) + 2
         '--- Move randomly 1 left, 1 right, or stay put (1/3 chance of each)
         SPRITES(index).velocity.col = INT(RND * 3) - 1
 

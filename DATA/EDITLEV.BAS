@@ -212,7 +212,7 @@ SUB LevelMenuPrint (menu AS LevelMenu)
             menuColor = 7
         END IF
 
-        PrintAt menu.offset - menu.min + row, 2, menuColor, LEVEL(row).title + "                                       "
+        PrintAt menu.offset - menu.min + row, 2, menuColor, "Level" + STR$(row) + " - " + LEVEL(row).title + "                                       "
         row = row + 1
     WEND
 END SUB
