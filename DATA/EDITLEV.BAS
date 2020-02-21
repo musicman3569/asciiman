@@ -24,7 +24,7 @@ END TYPE
 DIM SHARED MOUSE AS Mouse
 
 '--- Toolbar buttons to show at the bottom of the level editor for adding sprites/tiles
-DIM SHARED BUTTONS AS INTEGER: BUTTONS = 14 '--- MUST be set equal to the number of BUTTON() array elements
+DIM SHARED BUTTONS AS INTEGER: BUTTONS = 15 '--- MUST be set equal to the number of BUTTON() array elements
 DIM SHARED BUTTON(1 TO BUTTONS) AS Button
 BUTTON(1).label = "Player"
 BUTTON(1).char = ""
@@ -46,14 +46,16 @@ BUTTON(9).label = "Solid"
 BUTTON(9).char = "S"
 BUTTON(10).label = "Torch"
 BUTTON(10).char = "T"
-BUTTON(11).label = "Block"
-BUTTON(11).char = "ß"
-BUTTON(12).label = "Stone"
-BUTTON(12).char = "Û"
-BUTTON(13).label = "Solid (Cyan)"
-BUTTON(13).char = "±"
-BUTTON(14).label = "Solid (Lt Blue)"
-BUTTON(14).char = "²"
+BUTTON(11).label = "Pole"
+BUTTON(11).char = "P"
+BUTTON(12).label = "Block"
+BUTTON(12).char = "ß"
+BUTTON(13).label = "Stone"
+BUTTON(13).char = "Û"
+BUTTON(14).label = "Solid (Cyan)"
+BUTTON(14).char = "±"
+BUTTON(15).label = "Solid (Lt Blue)"
+BUTTON(15).char = "²"
 
 '--- Stores which toolbar button is currently selected
 DIM SHARED BUTTON_ACTIVE: BUTTON_ACTIVE = 12

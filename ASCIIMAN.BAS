@@ -63,6 +63,7 @@ TYPE GameState
     levelTitle AS STRING '--- Title of the currently loaded level.
     gravity AS INTEGER '--- Global gravity direction to combine with Sprite gravity settings.
     frameRate AS INTEGER '--- Framerate the game loop runs at in frames-per-second.
+    frameCount AS _INTEGER64 '--- Total number of frames that have passed since the level started
     playerCount AS INTEGER '--- Number of active players to load into the level
 END TYPE
 
@@ -460,7 +461,7 @@ KEY(15) ON
 ' Start Program Execution
 '--------------------------------------------------------------------------
 SetDisplayMode
-'IntroVid
+IntroVid
 WaitForPlayersToJoin
 
 WHILE GAME_STATE.nextLevel > 0 AND GAME_STATE.nextLevel < 11
@@ -640,6 +641,7 @@ END FUNCTION
 '--------------------------------------------------------------------------
 SUB RunMainGameLoop
     ClearInkey
+    GAME_STATE.frameCount = 0
 
     ' Keep running the game loop until the GAME_STATE.nextLevel changes from
     ' its original value. 0 indicates game over/quit
@@ -651,6 +653,7 @@ SUB RunMainGameLoop
         CheckSpecialCollisions
         GetKeyInput
         MoveSprites
+        GAME_STATE.frameCount = GAME_STATE.frameCount + 1
     WEND
 END SUB
 
@@ -839,26 +842,28 @@ SUB SpriteChangeType (index)
     DIM oldSprite AS Sprite
     DIM newSprite AS Sprite
 
-    oldSprite = SPRITES(index)
-    newSprite = SPRITE_TYPES(oldSprite.nextSpriteType)
+    IF SPRITES(index).nextSpriteType <> SPRITE_TYPE_NONE THEN
+        oldSprite = SPRITES(index)
+        newSprite = SPRITE_TYPES(oldSprite.nextSpriteType)
 
-    '--- Sprite type-specific changes here
-    SELECT CASE newSprite.spriteType
-        CASE SPRITE_TYPE_PLAYER, SPRITE_TYPE_PLAYER_SPIKEBALL, SPRITE_TYPE_PLAYER_DRAINED
-            newSprite.lives = oldSprite.lives
-            newSprite.gravityTimer = oldSprite.gravityTimer
-            newSprite.playerIndex = oldSprite.playerIndex
-            IF newSprite.spriteType = SPRITE_TYPE_PLAYER THEN
-                newSprite.charColor = PLAYER(oldSprite.playerIndex).spriteColor
-            END IF
-    END SELECT
+        '--- Sprite type-specific changes here
+        SELECT CASE newSprite.spriteType
+            CASE SPRITE_TYPE_PLAYER, SPRITE_TYPE_PLAYER_SPIKEBALL, SPRITE_TYPE_PLAYER_DRAINED
+                newSprite.lives = oldSprite.lives
+                newSprite.gravityTimer = oldSprite.gravityTimer
+                newSprite.playerIndex = oldSprite.playerIndex
+                IF newSprite.spriteType = SPRITE_TYPE_PLAYER THEN
+                    newSprite.charColor = PLAYER(oldSprite.playerIndex).spriteColor
+                END IF
+        END SELECT
 
-    '--- Changes that carry over for all types.
-    newSprite.position = oldSprite.position
-    newSprite.velocity = oldSprite.velocity
-    newSprite.moveTo = oldSprite.moveTo
+        '--- Changes that carry over for all types.
+        newSprite.position = oldSprite.position
+        newSprite.velocity = oldSprite.velocity
+        newSprite.moveTo = oldSprite.moveTo
 
-    SPRITES(index) = newSprite
+        SPRITES(index) = newSprite
+    END IF
 END SUB
 
 
@@ -969,8 +974,8 @@ END SUB
 '--------------------------------------------------------------------------
 SUB SpriteMoveLRRandomGround (index)
     IF SPRITES(index).moveTimer < 1 THEN
-        '--- Only move once every 1 to 20 game frames
-        SPRITES(index).moveTimer = INT(RND * 19) + 2
+        '--- Only move once every 4 to 15 game frames
+        SPRITES(index).moveTimer = INT(RND * 12) + 4
         '--- Move randomly 1 left, 1 right, or stay put (1/3 chance of each)
         SPRITES(index).velocity.col = INT(RND * 3) - 1
 
@@ -1535,7 +1540,7 @@ END SUB
 
 '--------------------------------------------------------------------------
 ' Returns the SPRITE_TYPE_{sprite_type} constant that specifies
-' the which type of sprite a character is.
+' which type of sprite a character is.
 '
 ' @param char$ Character to determing the sprite type for.
 ' @return Returns one of the SPRITE_TYPE global constants.
